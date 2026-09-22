@@ -1,0 +1,279 @@
+## Standard-pool adapter. Nonblocking native I/O borrows caller buffers;
+## only readiness and timers enter std/ioring. No std reactor state is changed.
+when defined(nimNativeAlloc):
+  {.error: "Standard runtime handles require -d:useMimalloc: the pinned native allocator cannot outlive an allocating thread".}
+when not defined(gcAtomicArc):
+  {.error: "Standard runtime handles require --mm:atomicArc".}
+
+import std/[syncio, assertions]
+import std/atomics
+import std/ticketlocks
+import std/stripes
+from std/rawthreads import getThreadId
+from zal_net/private/sys/sock import sleepUs
+import std/threadpool
+import std/ioring
+import zal_net/rt/time
+import zal_net/private/core/waitq
+import zal_net/private/backend/efdpool
+
+proc closeFd*(fd: cint) =
+  ## Final native release after borrowers drain. Cancellation is requested
+  ## separately; this operation does not retire another lane's pending waits.
+  ioring.closeFdRaw(fd)
+
+proc closeFdRaw*(fd: cint) =
+  ## Close a descriptor with no pending operations.
+  ioring.closeFdRaw(fd)
+
+const ExternalCapacity = 8192
+var external: FifoStripe[Continuation]
+external.init(ExternalCapacity)
+let entryThread = getThreadId()
+
+proc schedule(c: Continuation) =
+  if isPoolWorker() or getThreadId() == entryThread:
+    submit(c)
+  else:
+    # Message handoff to the process runner. A foreign thread never polls a
+    # standard lane or runs a passive I/O continuation through caller-runs.
+    while not external.tryEnqueue(c): sleepUs(1000)
+
+var gUp = false
+var gStopReq, gFinished, gActive: int
+var gAdmission: TicketLock
+var taskAnchor = default(CoroutineBase)
+var rootAnchor = default(CoroutineBase)
+var rootCompletion = default(Continuation)
+
+proc beStopping*(): bool {.inline.} = atomicLoad(gStopReq, moAcquire) != 0
+
+proc admitTask(): bool =
+  gAdmission.acquire()
+  result = not beStopping() and atomicLoad(gActive, moAcquire) < ExternalCapacity
+  if result: discard atomicFetchAdd(gActive, 1, moAcquireRelease)
+  gAdmission.release()
+
+proc admitCleanupTask(): bool =
+  ## Existing resources may need cleanup after stop admission closes. The
+  ## runner and this check share the lock, so cleanup cannot enter after drain.
+  gAdmission.acquire()
+  result = atomicLoad(gFinished, moAcquire) == 0 and
+    (not beStopping() or atomicLoad(gActive, moAcquire) > 0)
+  if result: discard atomicFetchAdd(gActive, 1, moAcquireRelease)
+  gAdmission.release()
+
+proc finishedTask(frame: ptr CoroutineBase): Continuation {.nimcall.} =
+  discard atomicFetchSub(gActive, 1, moAcquireRelease)
+  result = default(Continuation)
+
+proc finishedRoot(frame: ptr CoroutineBase): Continuation {.nimcall.} =
+  discard atomicFetchSub(gActive, 1, moAcquireRelease)
+  result = rootCompletion
+
+proc tracked(c: Continuation): Continuation =
+  result = c
+  result.env[].caller = Continuation(fn: finishedTask, env: addr taskAnchor)
+
+proc beInit*(workers: int) =
+  if gUp: return
+  initIoRing()
+  if workers > 0 and workers != workerCount:
+    stderr.writeLine("zal-net: unchanged std runtime selected " & $workerCount & " workers")
+  gUp = true
+
+proc beStop*() =
+  ## Signal-safe request. The process runner performs joining after tasks drain.
+  atomicStore(gStopReq, 1, moRelease)
+
+proc beRun*() =
+  ## The main thread alone services the standard foreign lane. Library-owned
+  ## tasks retain an admission until their complete passive body has returned.
+  var completions = default(array[16, IoCompletion])
+  while true:
+    gAdmission.acquire()
+    let drained = beStopping() and atomicLoad(gActive, moAcquire) == 0
+    gAdmission.release()
+    if drained: break
+    var incoming = default(array[64, Continuation])
+    let count = external.tryBulkDequeue(incoming.len, incoming)
+    for i in 0..<count: submit(incoming[i])
+    discard pollCompletions(completions)
+    sleepUs(1000)
+  shutdown()
+  closeWakePool()
+  atomicStore(gFinished, 1, moRelease)
+
+
+
+proc beWakeAcceptors*(fd: cint; ack: nil ptr int = nil) =
+  ## The single accept loop polls the listener; the wake connection made by
+  ## `stopAccepting` or `closeListener` makes that poll fire. The listener
+  ## is not shut down: that would discard the wake connection, and the
+  ## epoll fallback does not complete a read poll on the hang-up that
+  ## remains. Nothing to acknowledge (`beForgetAcks` is 0).
+  discard fd
+
+proc beForgetAcks*(): int {.inline.} = 0
+
+proc beInterruptFd*(fd: cint): bool =
+  ## Not on std: std/ioring cannot reach polls pending on other workers.
+  discard fd
+  result = false
+
+proc beNudgeFd*(fd: cint): bool =
+  ## Not on std (as `beInterruptFd`).
+  discard fd
+  result = false
+
+proc beNeedsPoke*(): bool {.inline.} = true
+  ## A poll armed on the listener completes only when it becomes readable.
+
+proc runtimeWorkers*(): int = workerCount
+  ## Pool workers. Placement is the pool's: `spawnAll` runs one instance.
+
+proc onLoop*(): bool {.inline.} = isPoolWorker()
+
+template beParkFd*(fd: cint; write, listener: bool; deadline: Deadline; res: var int) =
+  block:
+    res = -1
+    var dir = {evRead}
+    if write: dir = {evWrite}
+    let until = deadline
+    while true:
+      let cont = delay()
+      discard submitPollAdd(fd, earlier(until, afterMs(10)), dir, cont, addr res)
+      suspend()
+      if beStopping():
+        res = ECancelled
+        break
+      if res == time.IoTimedOut and monoNow() < until:
+        # A polling slice is not readiness. Keep the original deadline so
+        # callers with relative idle timeouts cannot restart it every 10 ms.
+        continue
+      break
+    if res == 0:
+      # io_uring always reports the hang-up bits: after the peer's
+      # half-close (EPOLLRDHUP) a write poll fires at once, and std/ioring
+      # maps a poll that fired only for those bits to 0. Wait a moment and
+      # report the direction ready: the caller's next system call tells a
+      # writable socket from a broken one, and the pause keeps a socket
+      # with a full buffer from spinning while EPOLLRDHUP stays set.
+      let pause = delay()
+      discard submitTimeout(afterMs(1), pause)
+      suspend()
+      res = toEventMask(dir)
+
+template beParkUntil*(deadline: Deadline) =
+  block:
+    let until = deadline
+    while not beStopping() and monoNow() < until:
+      let cont = delay()
+      discard submitTimeout(earlier(until, afterMs(10)), cont)
+      suspend()
+
+template beYield*() =
+  ## On a worker the continuation is staged on the private ring, flushed only
+  ## after this step returns, so it cannot race the suspending frame.
+  block:
+    let cont = delay()
+    if isPoolWorker(): submit(cont)
+    else: discard submitNop(never, cont)
+    suspend()
+
+template beTrySpawn*(call: untyped): bool =
+  block:
+    let accepted = admitTask()
+    if accepted: schedule(tracked(delay(call)))
+    accepted
+
+template beTryCleanup*(call: untyped): bool =
+  block:
+    let accepted = admitCleanupTask()
+    if accepted: schedule(tracked(delay(call)))
+    accepted
+
+template beSpawn*(call: untyped) =
+  discard beTrySpawn(call)
+
+template beTryRoot*(call: untyped; completion: Continuation): bool =
+  block:
+    let accepted = admitTask()
+    if accepted:
+      rootCompletion = completion
+      let rootContinuation: Continuation = delay(call)
+      rootContinuation.env[].caller = Continuation(fn: finishedRoot, env: addr rootAnchor)
+      schedule(rootContinuation)
+    accepted
+
+template beStartConn*(call: untyped) =
+  ## Inline until the first park; the pool places the rest.
+  if admitTask():
+    if isPoolWorker() or getThreadId() == entryThread: complete(tracked(delay(call)))
+    else: schedule(tracked(delay(call)))
+
+# ------------------------------------------------------------ wait nodes
+
+proc stageResume(c: Continuation) =
+  ## A resume must become visible only after its current passive step returns.
+  ## Workers stage on their private ring. The process runner stages through its
+  ## own I/O lane, which only that thread polls after returning from this step.
+  if isPoolWorker(): submit(c)
+  else:
+    assert getThreadId() == entryThread, "passive waits require a pool worker or the process runner"
+    discard submitNop(never, c)
+
+proc beSchedule*(c: Continuation) =
+  stageResume(c)
+
+proc bePrepareNode*(n: ptr WaitNode): bool =
+  n.ringRes = 0
+  result = leaseWake(n.efd, n.efdW)
+
+proc observeNode(n: ptr WaitNode; deadline: Deadline) {.passive.} =
+  while atomicLoad(n.state, moAcquire) == nsParked:
+    let wake = delay()
+    discard submitPollAdd(n.efd, earlier(deadline, afterMs(10)), {evRead}, wake, addr n.ringRes)
+    suspend()
+    if beStopping():
+      if tryClaim(n, wrClosed): atomicStore(n.state, nsFired, moRelease)
+    elif deadline <= monoNow():
+      if tryClaim(n, wrTimedOut): atomicStore(n.state, nsFired, moRelease)
+  # A remote winner may still be publishing its result and wake byte.
+  while atomicLoad(n.state, moAcquire) != nsFired: cpuRelax()
+
+proc beArmNode*(n: ptr WaitNode; deadline: Deadline) =
+  let watcher = delay(observeNode(n, deadline))
+  watcher.env[].caller = n.cont
+  stageResume(watcher)
+
+proc beSettleNode*(n: ptr WaitNode; armed: bool) =
+  ## The watcher returned only after its final readiness completion and claim.
+  if armed: drainWake(n.efd)
+  returnWake(n.efd, n.efdW)
+
+proc beResumeNode*(n: ptr WaitNode) =
+  ## Called once, by the claim winner, from any thread. The waiter may run
+  ## as soon as the write lands; it spins until nsFired before touching the
+  ## node, and the node is not touched after that store.
+  signalWake(n.efdW)
+  atomicStore(n.state, nsFired, moRelease)
+
+# ------------------------------------------------------------------ shards
+
+proc beShardCount*(): int = workerCount + 1
+  ## One shard per pool worker, plus one shared by every other thread.
+
+proc beShardId*(): int {.inline.} =
+  if isPoolWorker(): result = threadIdx
+  else: result = workerCount
+
+proc beFinished*(): bool = atomicLoad(gFinished, moAcquire) != 0
+
+template beTryStartConn*(call: untyped): bool =
+  block:
+    let accepted = admitTask()
+    if accepted:
+      if isPoolWorker() or getThreadId() == entryThread: complete(tracked(delay(call)))
+      else: schedule(tracked(delay(call)))
+    accepted
