@@ -16,8 +16,8 @@ var gRuntimeUp: int
 var gRunEntered: int
 let gRuntimeThread = getThreadId() # immutable identity of module initialization
 
-proc initRuntime*(workers = 0) =
-  ## Initialize process services. The initial pin selects its own pool size.
+proc initRuntime*() =
+  ## Initialize process services. ZAL_WORKERS is read before the standard ring starts.
   if atomicLoad(gRuntimeUp, moAcquire) == 2: return
   var expected = 0
   if not atomicCompareExchange(gRuntimeUp, expected, 1, moAcquireRelease, moAcquire):
@@ -26,9 +26,7 @@ proc initRuntime*(workers = 0) =
   installOomHandler()
   ignoreSigpipe()
   discard raiseFdLimit()
-  var n = workers
-  if n <= 0: n = workersFromEnv("ZAL_WORKERS")
-  beInit(n)
+  beInit(0)
   atomicStore(gRuntimeUp, 2, moRelease)
 
 proc drainRuntime*() =
@@ -92,7 +90,7 @@ template runMain*(call: untyped): bool =
 template startInline*(call: untyped) =
   ## Run a new passive call on the caller's trampoline until it first
   ## suspends.
-  complete(delay(call))
+  beStartInline(delay(call))
 
 template tryStartConn*(call: untyped): bool =
   ## False after shutdown begins, before a passive frame is allocated. The caller

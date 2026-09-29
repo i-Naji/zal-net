@@ -25,7 +25,8 @@ Low-level I/O reports bytes and failure separately. Do not replay partial writes
 
 The process runner drains tasks before shutting down the standard pool.
 The runtime cannot restart. Library close never shuts down the pool.
-At the initial compiler pin the pool selects its worker count.
+Set `ZAL_WORKERS` before startup to configure the standard pool.
+The default comes from its CPU count/affinity; `runtimeWorkers()` reports it.
 I/O uses nonblocking native calls and public standard readiness/timer operations.
 Cancellation returns after the pending standard operation releases its storage.
 

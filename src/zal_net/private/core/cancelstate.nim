@@ -2,7 +2,7 @@ import zal_net/private/runtime
 ## Cancel tokens. Cancelling one wakes, with `wrCancelled`, every wait hooked
 ## to it (Notify, Event, Chan, Oneshot, join, cancellable sleep), shuts down
 ## every socket adopted by it — which wakes any park on that socket, on
-## either backend — and cancels its children. `cancel` may be called from any
+## the standard runtime — and cancels its children. `cancel` may be called from any
 ## thread, including one that is not a loop, and is idempotent.
 ##
 ## Nimony has no unwinding: cancellation reaches token-aware waits and

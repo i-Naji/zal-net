@@ -121,7 +121,7 @@ proc taskMain(t: Task) {.passive.} =
   finish(t)
 
 proc startTask*(fn: TaskFn; arg: nil pointer; scope: nil Scope = nil): Task =
-  ## Start `fn(task, arg)` on this loop (on the std backend, on the pool).
+  ## Start `fn(task, arg)` on the standard pool.
   ## Returns the handle; release it when done. After shutdown the body does not
   ## run: the returned handle is finished/cancelled with code ResourceClosed;
   ## the caller retains arg and any resources the body would have consumed.

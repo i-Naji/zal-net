@@ -206,10 +206,16 @@ template beTryRoot*(call: untyped; completion: Continuation): bool =
       schedule(rootContinuation)
     accepted
 
+proc beStartInline*(c: Continuation) =
+  # complete now owns a Join; advance preserves our existing completion caller.
+  var pending = c
+  while pending.fn != nil:
+    pending = advance(pending)
+
 template beStartConn*(call: untyped) =
   ## Inline until the first park; the pool places the rest.
   if admitTask():
-    if isPoolWorker() or getThreadId() == entryThread: complete(tracked(delay(call)))
+    if isPoolWorker() or getThreadId() == entryThread: beStartInline(tracked(delay(call)))
     else: schedule(tracked(delay(call)))
 
 # ------------------------------------------------------------ wait nodes
@@ -274,6 +280,6 @@ template beTryStartConn*(call: untyped): bool =
   block:
     let accepted = admitTask()
     if accepted:
-      if isPoolWorker() or getThreadId() == entryThread: complete(tracked(delay(call)))
+      if isPoolWorker() or getThreadId() == entryThread: beStartInline(tracked(delay(call)))
       else: schedule(tracked(delay(call)))
     accepted

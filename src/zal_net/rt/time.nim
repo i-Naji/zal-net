@@ -1,4 +1,5 @@
 ## Public standard deadlines and readiness events.
+import zal_net/private/backend/stdpre
 import std/ioring
 export ioring.Deadline, ioring.never, ioring.monoNow, ioring.after, ioring.afterMs,
   ioring.earlier, ioring.millisUntil, ioring.IoEvent, ioring.IoEvents,

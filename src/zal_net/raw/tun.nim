@@ -184,8 +184,7 @@ proc openTun*(name = ""; tap = false; timeoutMs = 0): TunDevice =
     result.error = "no TUN devices on this system"
 
 proc interrupt*(t: TunDevice): bool =
-  ## Wake whatever is parked on the device with ECancelled (loops backend;
-  ## see `interruptFd`).
+  ## Descriptor-wide wakeup is unavailable; use token-aware I/O cancellation.
   result = interruptFd(t.fd)
 
 proc close*(t: var TunDevice) =
