@@ -89,7 +89,7 @@ proc main() {.passive.} =
   assert result.code == 0 and evaluated == 1, "successful hostname evaluated once"
   let candidate = result.value
   if candidate != nil:
-    assert state(candidate) == ownerOpen, "friendly TCP owner initialized on home loop"
+    assert state(candidate) == ownerOpen, "retained TCP owner initialized"
     var remote = accept(listener, deadline=afterMs(2000))
     assert remote.isOpen, "accept friendly TCP peer"
     assert sendFrom(candidate, bytes, afterMs(2000)) == 1, "friendly TCP send"

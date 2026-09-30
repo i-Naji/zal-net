@@ -69,7 +69,6 @@ proc main() {.passive.} =
   let receiver = adopted.value
   if receiver != nil:
     assert nativeHandle(receiver) == fd and state(receiver) == ownerOpen, "UDPRef check 57"
-    assert 0 == 0, "UDPRef check 58"
     let connected = connectUdpRef("127.0.0.1", target.port, timeoutMs=0)
     let sender = connected.value
     if sender != nil:

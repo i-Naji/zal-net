@@ -1,6 +1,6 @@
 ## Listeners at run time: closeListener ends every accept loop on one
 ## listener, frees its port and registry slot, and new listeners and accept
-## loops can start while the loops run. Also spawnOn.
+## loops can start while the loops run. Task submission.
 import std/assertions
 import std/syncio
 import std/atomics
@@ -102,7 +102,7 @@ proc main() {.passive.} =
     sleepMs(1)
     spins = spins + 1
   assert atomicLoad(gOnLoop, moAcquire) == 8
-  echo "PASS spawnOn"
+  echo "PASS task submission"
   quit 0
 
 initRuntime()
