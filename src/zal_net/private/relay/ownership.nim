@@ -1,3 +1,5 @@
+{.feature: "assumeSync".}
+# Shared state uses pool/lifecycle locks, atomics and publication barriers.
 ## Included by relay/conn; block ownership, pools and connection closure.
 # ------------------------------------------------------------------- pool
 

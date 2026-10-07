@@ -16,6 +16,7 @@ import std/syncio
 import std/ticketlocks
 import std/locks
 import zal_net/rt
+import zal_net/private/services
 import zal_net/rt/sync
 import zal_net/private/core/eventcount
 import zal_net/private/core/mailbox
@@ -89,7 +90,7 @@ var gHead, gTail: nil ptr Job   # the queue, through node.next
 var gQueued: int
 var gMaxQueued = 4096
 var gPoolState: int          # atomic: 0 none, 1 starting, 2 running, 3 joined
-var gWake = newEventCount()
+let gWake = newEventCount()
 var gWorkers: array[256, ThreadHandle]
 var gWorkerCount: int
 var gActiveWorkers: int
@@ -130,16 +131,17 @@ proc deliver(b: InboxPtr; j: JobPtr; maxQueued = 0): bool =
 
 
 proc takeJob(): nil ptr Job =
-  acquire(gPoolLock)
-  let j = gHead
-  if j != nil:
-    let next = cast[nil ptr Job](j.node.next)
-    gHead = next
-    if next == nil: gTail = nil
-    j.node.next = nil
-    gQueued = gQueued - 1
-  release(gPoolLock)
-  result = j
+  {.cast(assumeSync).}:
+    acquire(gPoolLock)
+    let j = gHead
+    if j != nil:
+      let next = cast[nil ptr Job](j.node.next)
+      gHead = next
+      if next == nil: gTail = nil
+      j.node.next = nil
+      gQueued = gQueued - 1
+    release(gPoolLock)
+    result = j
 
 proc blockingMain(arg: nil pointer) {.nimcall.} =
   while true:
@@ -174,59 +176,64 @@ proc blockingMain(arg: nil pointer) {.nimcall.} =
 
   discard atomicFetchSub(gActiveWorkers, 1, moRelease)
 
+proc stopBlockingPool*()
+proc joinBlockingPool*(): bool
+
 proc initBlockingPool*(threads = 0; maxQueued = 4096) =
-  ## Start the pool: `threads`, else NN_BLOCKING_THREADS, else 4. Called
-  ## on first use; idempotent.
-  if atomicLoad(gPoolState, moAcquire) >= 2: return
-  var expected = 0
-  if not atomicCompareExchange(gPoolState, expected, 1, moAcquireRelease, moAcquire):
-    while atomicLoad(gPoolState, moAcquire) == 1: discard
-    return
-  gMaxQueued = maxQueued
-  var n = threads
-  if n <= 0: n = workersFromEnv("NN_BLOCKING_THREADS")
-  if n <= 0: n = 4
-  n = min(n, gWorkers.len)
-  var i = 0
-  while i < n:
-    discard atomicFetchAdd(gActiveWorkers, 1, moRelaxed)
-    if not startJoinable(gWorkers[i], blockingMain, nil):
-      discard atomicFetchSub(gActiveWorkers, 1, moRelaxed)
-      break
-    i = i + 1
-  gWorkerCount = i
-  if i == 0:
-    atomicStore(gPoolClosing, 1, moRelease)
-  atomicStore(gPoolState, 2, moRelease)
+  {.cast(assumeSync).}:
+    ## Start the pool: `threads`, else NN_BLOCKING_THREADS, else 4. Called
+    ## on first use; idempotent.
+    if atomicLoad(gPoolState, moAcquire) >= 2: return
+    var expected = 0
+    if not atomicCompareExchange(gPoolState, expected, 1, moAcquireRelease, moAcquire):
+      while atomicLoad(gPoolState, moAcquire) == 1: discard
+      return
+    gMaxQueued = maxQueued
+    var n = threads
+    if n <= 0: n = workersFromEnv("NN_BLOCKING_THREADS")
+    if n <= 0: n = 4
+    n = min(n, gWorkers.len)
+    var i = 0
+    while i < n:
+      discard atomicFetchAdd(gActiveWorkers, 1, moRelaxed)
+      if not startJoinable(gWorkers[i], blockingMain, nil):
+        discard atomicFetchSub(gActiveWorkers, 1, moRelaxed)
+        break
+      i = i + 1
+    gWorkerCount = i
+    if i == 0:
+      atomicStore(gPoolClosing, 1, moRelease)
+    atomicStore(gPoolState, 2, moRelease)
 
 proc spawnBlocking*(j: ptr Job; inbox: nil ptr JobInbox = nil): bool =
-  ## Queue `j` (the pool takes its own reference). False when the queue is
-  ## full: the caller may retry later or fail the request.
-  initBlockingPool()
-  var box: nil InboxPtr = nil
-  if inbox != nil:
-    box = retainInbox(inbox)
-    if box == nil: return false
-  j.inbox = box
-  j.state = jsQueued
-  acquire(gPoolLock)
-  if gQueued >= gMaxQueued or atomicLoad(gPoolClosing, moAcquire) != 0:
+  {.cast(assumeSync).}:
+    ## Queue `j` (the pool takes its own reference). False when the queue is
+    ## full: the caller may retry later or fail the request.
+    initBlockingPool()
+    var box: nil InboxPtr = nil
+    if inbox != nil:
+      box = retainInbox(inbox)
+      if box == nil: return false
+    j.inbox = box
+    j.state = jsQueued
+    acquire(gPoolLock)
+    if gQueued >= gMaxQueued or atomicLoad(gPoolClosing, moAcquire) != 0:
+      release(gPoolLock)
+      j.inbox = nil
+      if box != nil: releaseInbox(box)
+      return false
+    discard atomicFetchAdd(j.refs, 1, moRelaxed)
+    j.node.next = nil
+    let t = gTail
+    if t == nil: gHead = j
+    else: t.node.next = addr j.node
+    gTail = j
+    gQueued = gQueued + 1
+    # Serialize the wake with shutdown: the last worker may already have
+    # drained this job before the submitting thread gets here.
+    notifyOne(gWake)
     release(gPoolLock)
-    j.inbox = nil
-    if box != nil: releaseInbox(box)
-    return false
-  discard atomicFetchAdd(j.refs, 1, moRelaxed)
-  j.node.next = nil
-  let t = gTail
-  if t == nil: gHead = j
-  else: t.node.next = addr j.node
-  gTail = j
-  gQueued = gQueued + 1
-  # Serialize the wake with shutdown: the last worker may already have
-  # drained this job before the submitting thread gets here.
-  notifyOne(gWake)
-  release(gPoolLock)
-  result = true
+    result = true
 
 proc awaitJob*(j: ptr Job; d: Deadline; tok: nil CancelToken = nil): WaitResult {.passive.} =
   ## Wait for `j` to finish. On a timeout or cancel the job is abandoned: it
@@ -326,22 +333,28 @@ proc blockingPoolStopped*(): bool =
   atomicLoad(gPoolClosing, moAcquire) != 0 and atomicLoad(gActiveWorkers, moAcquire) == 0
 
 proc joinBlockingPool*(): bool =
-  ## Control-thread only. False while an OS call or queued job is still running;
-  ## retry later. Never force-free a worker's memory. True is idempotent.
-  acquire(gPoolLock)
-  if atomicLoad(gPoolState, moAcquire) == 3:
-    release(gPoolLock)
-    return true
-  if not blockingPoolStopped():
-    release(gPoolLock)
-    return false
-  var i = 0
-  while i < gWorkerCount:
-    if not joinThread(gWorkers[i]):
+  {.cast(assumeSync).}:
+    ## Control-thread only. False while an OS call or queued job is still running;
+    ## retry later. Never force-free a worker's memory. True is idempotent.
+    acquire(gPoolLock)
+    if atomicLoad(gPoolState, moAcquire) == 3:
+      release(gPoolLock)
+      return true
+    if not blockingPoolStopped():
       release(gPoolLock)
       return false
-    i = i + 1
+    var i = 0
+    while i < gWorkerCount:
+      if not joinThread(gWorkers[i]):
+        release(gPoolLock)
+        return false
+      i = i + 1
+    freeEventCount(gWake)
+    atomicStore(gPoolState, 3, moRelease)
+    release(gPoolLock)
+    result = true
+
+if not registerProcessService(stopBlockingPool, joinBlockingPool):
   freeEventCount(gWake)
+  atomicStore(gPoolClosing, 1, moRelease)
   atomicStore(gPoolState, 3, moRelease)
-  release(gPoolLock)
-  result = true

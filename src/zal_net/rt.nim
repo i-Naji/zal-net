@@ -26,7 +26,7 @@ proc initRuntime*() =
   installOomHandler()
   ignoreSigpipe()
   discard raiseFdLimit()
-  beInit(0)
+  beInit()
   atomicStore(gRuntimeUp, 2, moRelease)
 
 proc drainRuntime*() =

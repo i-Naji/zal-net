@@ -35,24 +35,26 @@ type
     q: WaitQueue
     permits: int
 
-proc notifyOne*(n: ptr Notify; coalesce = false) =
-  ## Wake the longest waiter, or store a permit for the next `wait`.
-  ## Coalescing retains at most one new permit when no waiter exists. Use it
-  ## for a condition that callers recheck, rather than counting every signal.
-  acquire(n.lock)
-  let w = claimFirst(n.q, wrReady)
-  if w == nil:
-    if coalesce: n.permits = max(n.permits, 1)
-    else: n.permits = n.permits + 1
-  release(n.lock)
-  if w != nil: beResumeNode(w)
+proc notifyOne*(n: ptr Notify; coalesce = false) {.sync.} =
+  {.cast(assumeSync).}:
+    ## Wake the longest waiter, or store a permit for the next `wait`.
+    ## Coalescing retains at most one new permit when no waiter exists. Use it
+    ## for a condition that callers recheck, rather than counting every signal.
+    acquire(n.lock)
+    let w = claimFirst(n.q, wrReady)
+    if w == nil:
+      if coalesce: n.permits = max(n.permits, 1)
+      else: n.permits = n.permits + 1
+    release(n.lock)
+    if w != nil: beResumeNode(w)
 
-proc notifyAll*(n: ptr Notify) =
-  ## Wake every current waiter; stores no permit.
-  acquire(n.lock)
-  let w = claimAll(n.q, wrReady)
-  release(n.lock)
-  resumeList(w)
+proc notifyAll*(n: ptr Notify) {.sync.} =
+  {.cast(assumeSync).}:
+    ## Wake every current waiter; stores no permit.
+    acquire(n.lock)
+    let w = claimAll(n.q, wrReady)
+    release(n.lock)
+    resumeList(w)
 
 proc takePermit(n: ptr Notify): bool {.inline.} =
   result = false
@@ -60,15 +62,16 @@ proc takePermit(n: ptr Notify): bool {.inline.} =
     n.permits = n.permits - 1
     result = true
 
-proc wait*(n: ptr Notify; d: Deadline; tok: nil CancelToken = nil): WaitResult {.passive.} =
-  if cancelled(tok): return wrCancelled
-  acquire(n.lock)
-  let got = takePermit(n)
-  release(n.lock)
-  if got: return wrReady
-  var node = default(WaitNode)
-  parkOn(node, addr n.lock, addr n.q, tok, d, n.permits > 0, takePermit(n))
-  result = WaitResult(node.res)
+proc wait*(n: ptr Notify; d: Deadline; tok: nil CancelToken = nil): WaitResult {.passive, sync.} =
+  {.cast(assumeSync).}:
+    if cancelled(tok): return wrCancelled
+    acquire(n.lock)
+    let got = takePermit(n)
+    release(n.lock)
+    if got: return wrReady
+    var node = default(WaitNode)
+    parkOn(node, addr n.lock, addr n.q, tok, d, n.permits > 0, takePermit(n))
+    result = WaitResult(node.res)
 
 # ------------------------------------------------------------------- Event
 
@@ -79,29 +82,33 @@ type
     q: WaitQueue
     fired: bool
 
-proc setEvent*(e: ptr Event) =
-  acquire(e.lock)
-  e.fired = true
-  let w = claimAll(e.q, wrReady)
-  release(e.lock)
-  resumeList(w)
+proc setEvent*(e: ptr Event) {.sync.} =
+  {.cast(assumeSync).}:
+    acquire(e.lock)
+    e.fired = true
+    let w = claimAll(e.q, wrReady)
+    release(e.lock)
+    resumeList(w)
 
-proc clearEvent*(e: ptr Event) =
-  acquire(e.lock)
-  e.fired = false
-  release(e.lock)
+proc clearEvent*(e: ptr Event) {.sync.} =
+  {.cast(assumeSync).}:
+    acquire(e.lock)
+    e.fired = false
+    release(e.lock)
 
-proc isSet*(e: ptr Event): bool =
-  acquire(e.lock)
-  result = e.fired
-  release(e.lock)
+proc isSet*(e: ptr Event): bool {.sync.} =
+  {.cast(assumeSync).}:
+    acquire(e.lock)
+    result = e.fired
+    release(e.lock)
 
-proc wait*(e: ptr Event; d: Deadline; tok: nil CancelToken = nil): WaitResult {.passive.} =
-  if cancelled(tok): return wrCancelled
-  if isSet(e): return wrReady
-  var node = default(WaitNode)
-  parkOn(node, addr e.lock, addr e.q, tok, d, e.fired)
-  result = WaitResult(node.res)
+proc wait*(e: ptr Event; d: Deadline; tok: nil CancelToken = nil): WaitResult {.passive, sync.} =
+  {.cast(assumeSync).}:
+    if cancelled(tok): return wrCancelled
+    if isSet(e): return wrReady
+    var node = default(WaitNode)
+    parkOn(node, addr e.lock, addr e.q, tok, d, e.fired)
+    result = WaitResult(node.res)
 
 # ----------------------------------------------------------------- Oneshot
 

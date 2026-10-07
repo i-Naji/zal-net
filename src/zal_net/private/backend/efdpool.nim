@@ -13,9 +13,40 @@ when defined(linux):
 
 const PoolMax = 256
 
-var gLock: TicketLock
-var gFree: array[PoolMax, array[2, cint]]
-var gFreeLen: int
+type WakePool = object
+  lock: TicketLock
+  free: array[PoolMax, array[2, cint]]
+  count: int
+var pool: WakePool
+
+proc takePair(pool: var WakePool; r, w: var cint): bool {.sync.} =
+  result = false
+  acquire(pool.lock)
+  defer: release(pool.lock)
+  {.cast(assumeSync).}:
+    if pool.count > 0:
+      dec pool.count
+      r = pool.free[pool.count][0]
+      w = pool.free[pool.count][1]
+      result = true
+
+proc putPair(pool: var WakePool; r, w: cint): bool {.sync.} =
+  result = false
+  acquire(pool.lock)
+  defer: release(pool.lock)
+  {.cast(assumeSync).}:
+    if pool.count < PoolMax:
+      pool.free[pool.count] = [r, w]
+      inc pool.count
+      result = true
+
+proc drainPool(pool: var WakePool) {.sync.} =
+  acquire(pool.lock)
+  defer: release(pool.lock)
+  {.cast(assumeSync).}:
+    while pool.count > 0:
+      dec pool.count
+      wakeClose(pool.free[pool.count][0], pool.free[pool.count][1])
 
 proc newPair(r, w: var cint): bool =
   when defined(linux):
@@ -28,14 +59,7 @@ proc newPair(r, w: var cint): bool =
     result = wakePair(r, w)
 
 proc leaseWake*(r, w: var cint): bool =
-  acquire(gLock)
-  if gFreeLen > 0:
-    gFreeLen = gFreeLen - 1
-    r = gFree[gFreeLen][0]
-    w = gFree[gFreeLen][1]
-    release(gLock)
-    return true
-  release(gLock)
+  if takePair(pool, r, w): return true
   result = newPair(r, w)
 
 proc signalWake*(w: cint) =
@@ -54,20 +78,8 @@ proc drainWake*(r: cint) =
 
 proc returnWake*(r, w: cint) =
   ## The caller drained `r` or never signalled it.
-  acquire(gLock)
-  if gFreeLen < PoolMax:
-    gFree[gFreeLen][0] = r
-    gFree[gFreeLen][1] = w
-    gFreeLen = gFreeLen + 1
-    release(gLock)
-    return
-  release(gLock)
-  wakeClose(r, w)
+  if not putPair(pool, r, w): wakeClose(r, w)
 
 proc closeWakePool*() =
   ## Called by the process runner after every waiter and pool worker is joined.
-  acquire(gLock)
-  while gFreeLen > 0:
-    dec gFreeLen
-    wakeClose(gFree[gFreeLen][0], gFree[gFreeLen][1])
-  release(gLock)
+  drainPool(pool)

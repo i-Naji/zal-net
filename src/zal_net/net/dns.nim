@@ -148,65 +148,68 @@ proc sameHost(e: ptr DnsEntry; host: openArray[char]; sockType, family: cint): b
 
 proc cacheLookup(host: openArray[char]; port: uint16; sockType, family: cint;
                  outp: ptr UncheckedArray[SockAddrBuf]): int =
-  result = 0
-  if host.len == 0 or host.len > 255: return 0
-  let now = int64(monoNow())
-  let s = hostSlot(host)
-  acquire(dnsCacheLock)
-  var i = 0
-  while i < DnsProbe:
-    let e = addr dnsCache[(s + i) and (DnsSlots - 1)]
-    if e.expires > now and sameHost(e, host, sockType, family):
-      var k = 0
-      while k < e.n:
-        outp[k] = e.addrs[k]
-        setPort(outp[k], port)
-        k = k + 1
-      result = e.n
-      break
-    i = i + 1
-  release(dnsCacheLock)
+  {.cast(assumeSync).}:
+    result = 0
+    if host.len == 0 or host.len > 255: return 0
+    let now = int64(monoNow())
+    let s = hostSlot(host)
+    acquire(dnsCacheLock)
+    var i = 0
+    while i < DnsProbe:
+      let e = addr dnsCache[(s + i) and (DnsSlots - 1)]
+      if e.expires > now and sameHost(e, host, sockType, family):
+        var k = 0
+        while k < e.n:
+          outp[k] = e.addrs[k]
+          setPort(outp[k], port)
+          k = k + 1
+        result = e.n
+        break
+      i = i + 1
+    release(dnsCacheLock)
 
 proc cacheStore(req: ptr ResolveJob) =
-  ## Replaces the same name, else the first free or oldest slot in the
-  ## probe window. Failed lookups are not cached.
-  if req.n <= 0: return
-  let hostLen = req.hostLen
-  let now = int64(monoNow())
-  let s = hostSlot(req.host.toOpenArray(0, hostLen - 1))
-  acquire(dnsCacheLock)
-  var victim = addr dnsCache[s]
-  var i = 0
-  while i < DnsProbe:
-    let e = addr dnsCache[(s + i) and (DnsSlots - 1)]
-    if sameHost(e, req.host.toOpenArray(0, hostLen - 1), req.sockType, req.family):
-      victim = e
-      break
-    if e.expires < victim.expires: victim = e
-    i = i + 1
-  victim.expires = now + DnsTtlNs
-  victim.sockType = req.sockType
-  victim.family = req.family
-  victim.hostLen = hostLen
-  copyMem(addr victim.host[0], addr req.host[0], hostLen)
-  victim.n = req.n
-  var k = 0
-  while k < req.n:
-    victim.addrs[k] = req.addrs[k]
-    k = k + 1
-  release(dnsCacheLock)
+  {.cast(assumeSync).}:
+    ## Replaces the same name, else the first free or oldest slot in the
+    ## probe window. Failed lookups are not cached.
+    if req.n <= 0: return
+    let hostLen = req.hostLen
+    let now = int64(monoNow())
+    let s = hostSlot(req.host.toOpenArray(0, hostLen - 1))
+    acquire(dnsCacheLock)
+    var victim = addr dnsCache[s]
+    var i = 0
+    while i < DnsProbe:
+      let e = addr dnsCache[(s + i) and (DnsSlots - 1)]
+      if sameHost(e, req.host.toOpenArray(0, hostLen - 1), req.sockType, req.family):
+        victim = e
+        break
+      if e.expires < victim.expires: victim = e
+      i = i + 1
+    victim.expires = now + DnsTtlNs
+    victim.sockType = req.sockType
+    victim.family = req.family
+    victim.hostLen = hostLen
+    copyMem(addr victim.host[0], addr req.host[0], hostLen)
+    victim.n = req.n
+    var k = 0
+    while k < req.n:
+      victim.addrs[k] = req.addrs[k]
+      k = k + 1
+    release(dnsCacheLock)
 
 proc forgetHost*(host: string; sockType, family: cint) =
-  ## Drop a cached name, e.g. after none of its addresses accepted a dial.
-  if host.len == 0 or host.len > 255: return
-  let s = hostSlot(host.toOpenArray(0, host.len - 1))
-  acquire(dnsCacheLock)
-  var i = 0
-  while i < DnsProbe:
-    let e = addr dnsCache[(s + i) and (DnsSlots - 1)]
-    if sameHost(e, host.toOpenArray(0, host.len - 1), sockType, family): e.expires = 0
-    i = i + 1
-  release(dnsCacheLock)
+  {.cast(assumeSync).}:
+    ## Drop a cached name, e.g. after none of its addresses accepted a dial.
+    if host.len == 0 or host.len > 255: return
+    let s = hostSlot(host.toOpenArray(0, host.len - 1))
+    acquire(dnsCacheLock)
+    var i = 0
+    while i < DnsProbe:
+      let e = addr dnsCache[(s + i) and (DnsSlots - 1)]
+      if sameHost(e, host.toOpenArray(0, host.len - 1), sockType, family): e.expires = 0
+      i = i + 1
+    release(dnsCacheLock)
 
 proc resolveAsync*(host: string; port: uint16; sockType, family: cint;
                    outp: ptr UncheckedArray[SockAddrBuf]; deadline = never;

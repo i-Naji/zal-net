@@ -35,7 +35,7 @@ proc dispose(context: pointer): int {.nimcall.} =
   let held = connection(context)
   result = closeNow(held)
 
-var operations = StreamOps(recv: read, send: write, shutdownWrite: halfClose,
+let operations = StreamOps(recv: read, send: write, shutdownWrite: halfClose,
                           interrupt: abort)
 
 

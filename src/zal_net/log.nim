@@ -1,3 +1,5 @@
+{.feature: "assumeSync".}
+# Shared state uses pool/lifecycle locks, atomics and publication barriers.
 import zal_net/private/runtime
 ## Asynchronous logging that never blocks a loop. Each loop (or pool worker)
 ## appends fixed-size records to its own ring; other threads share one ring.
@@ -11,6 +13,7 @@ import zal_net/private/runtime
 import std/atomics
 import std/ticketlocks
 import zal_net/rt
+import zal_net/private/services
 import zal_net/private/core/eventcount
 import zal_net/private/sys/threads
 import zal_net/private/sys/sock
@@ -247,6 +250,9 @@ proc releaseRings() =
   if gShards > 0: freeShared(gRings)
   gShards = 0
 
+proc stopLogger*()
+proc joinLogger*(): bool
+
 proc initLogger*(fd: cint = 2; level = lvInfo; ringSlots = 1024): bool =
   ## Borrow `fd` until joinLogger succeeds. Call after initRuntime. Repeated
   ## initialization while running succeeds; shutdown is final (no restart).
@@ -320,3 +326,8 @@ proc flushLogger*(timeoutMs = 1000) =
   while atomicLoad(gPending, moAcquire) > 0 and waited < timeoutMs:
     sleepUs(1000)
     waited = waited + 1
+
+if not registerProcessService(stopLogger, joinLogger):
+  freeEventCount(gWake)
+  atomicStore(gStopped, 1, moRelease)
+  atomicStore(gUp, LoggerJoined, moRelease)

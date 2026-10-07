@@ -435,7 +435,7 @@ proc closeListener*(fd: cint; acceptors = 1;
   beginClose(slot, acceptors + beForgetAcks())
   var poke: cint = -1
   if beNeedsPoke(): poke = pokeListener(fd)
-  beWakeAcceptors(fd, owedCounter(slot))
+  beWakeAcceptors(fd)
   result = wrReady
   while closeOwed(slot) > 0:
     if deadline <= monoNow():

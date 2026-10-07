@@ -81,7 +81,6 @@ proc beginClose*(slot, owed: int) =
 
 proc ackClose*(slot: int) = discard atomicFetchSub(gLsn[slot].owed, 1, moAcquireRelease)
 proc closeOwed*(slot: int): int {.inline.} = atomicLoad(gLsn[slot].owed, moAcquire)
-proc owedCounter*(slot: int): ptr int {.inline.} = addr gLsn[slot].owed
 
 proc freeListener*(slot: int) =
   atomicStore(gLsn[slot].stopped, 0, moRelease)

@@ -1,3 +1,4 @@
+import std/atomics
 ## ICMP echo ("ping") over net/ip: the unprivileged datagram ICMP sockets
 ## systems offer for it (always on macOS; on Linux for the groups in
 ## `net.ipv4.ping_group_range`), else a raw socket where the process has
@@ -82,8 +83,8 @@ when defined(windows):
     copyMem(addr j.dst[0], unsafeAddr ip.bytes[0], 16)
     j.timeoutMs = cint(timeoutMs)
     j.payload = cint(max(0, min(payload, 1400)))
-    gSeq = gSeq + 1
-    let sq = uint16(gSeq and 0xffff)
+    let sequence = atomicFetchAdd(gSeq, 1, moRelaxed) + 1
+    let sq = uint16(sequence and 0xffff)
     if not spawnBlocking(addr j.job):
       releaseJob(addr j.job)
       result.error = PingFailed
@@ -111,9 +112,9 @@ else:
       if not s.ok:
         result.error = if denied(s): PingDenied else: PingFailed
         return
-    gSeq = gSeq + 1
-    let sq = uint16(gSeq and 0xffff)
-    let id = uint16((getPid() xor (gSeq shr 16)) and 0xffff)
+    let sequence = atomicFetchAdd(gSeq, 1, moRelaxed) + 1
+    let sq = uint16(sequence and 0xffff)
+    let id = uint16((getPid() xor (sequence shr 16)) and 0xffff)
     let size = 8 + max(0, min(payload, 1400))
     var pkt = default(array[1500, byte])
     pkt[0] = if v6: EchoRequest6 else: EchoRequest4

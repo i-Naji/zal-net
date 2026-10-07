@@ -16,6 +16,7 @@ import std/ioring
 import zal_net/rt/time
 import zal_net/private/core/waitq
 import zal_net/private/backend/efdpool
+import zal_net/private/services
 
 proc closeFd*(fd: cint) =
   ## Final native release after borrowers drain. Cancellation is requested
@@ -31,20 +32,32 @@ var external: FifoStripe[Continuation]
 external.init(ExternalCapacity)
 let entryThread = getThreadId()
 
+proc enqueueExternal(queue: var FifoStripe[Continuation]; c: Continuation): bool {.sync.} =
+  # FifoStripe serializes its storage internally.
+  {.cast(assumeSync).}:
+    result = queue.tryEnqueue(c)
+
+proc dequeueExternal(queue: var FifoStripe[Continuation]; incoming: var openArray[Continuation]): int {.sync.} =
+  {.cast(assumeSync).}:
+    result = queue.tryBulkDequeue(incoming.len, incoming)
+
+proc prepareRoot(root: var CoroutineBase; completion: Continuation) {.sync.} =
+  # The process entry winner initializes this before publishing its first task.
+  {.cast(assumeSync).}:
+    root.caller = completion
+
 proc schedule(c: Continuation) =
   if isPoolWorker() or getThreadId() == entryThread:
     submit(c)
   else:
     # Message handoff to the process runner. A foreign thread never polls a
     # standard lane or runs a passive I/O continuation through caller-runs.
-    while not external.tryEnqueue(c): sleepUs(1000)
+    while not enqueueExternal(external, c): sleepUs(1000)
 
-var gUp = false
 var gStopReq, gFinished, gActive: int
 var gAdmission: TicketLock
 var taskAnchor = default(CoroutineBase)
 var rootAnchor = default(CoroutineBase)
-var rootCompletion = default(Continuation)
 
 proc beStopping*(): bool {.inline.} = atomicLoad(gStopReq, moAcquire) != 0
 
@@ -69,21 +82,17 @@ proc finishedTask(frame: ptr CoroutineBase): Continuation {.nimcall.} =
 
 proc finishedRoot(frame: ptr CoroutineBase): Continuation {.nimcall.} =
   discard atomicFetchSub(gActive, 1, moAcquireRelease)
-  result = rootCompletion
+  result = frame.caller
 
 proc tracked(c: Continuation): Continuation =
   result = c
   result.env[].caller = Continuation(fn: finishedTask, env: addr taskAnchor)
 
-proc beInit*(workers: int) =
-  if gUp: return
-  initIoRing()
-  if workers > 0 and workers != workerCount:
-    stderr.writeLine("zal-net: unchanged std runtime selected " & $workerCount & " workers")
-  gUp = true
+proc beInit*() = initIoRing()
 
 proc beStop*() =
   ## Signal-safe request. The process runner performs joining after tasks drain.
+  closeServiceAdmission()
   atomicStore(gStopReq, 1, moRelease)
 
 proc beRun*() =
@@ -94,9 +103,10 @@ proc beRun*() =
     gAdmission.acquire()
     let drained = beStopping() and atomicLoad(gActive, moAcquire) == 0
     gAdmission.release()
-    if drained: break
+    if drained and joinProcessServices(): break
+    if beStopping(): discard joinProcessServices()
     var incoming = default(array[64, Continuation])
-    let count = external.tryBulkDequeue(incoming.len, incoming)
+    let count = dequeueExternal(external, incoming)
     for i in 0..<count: submit(incoming[i])
     discard pollCompletions(completions)
     sleepUs(1000)
@@ -106,7 +116,7 @@ proc beRun*() =
 
 
 
-proc beWakeAcceptors*(fd: cint; ack: nil ptr int = nil) =
+proc beWakeAcceptors*(fd: cint) =
   ## The single accept loop polls the listener; the wake connection made by
   ## `stopAccepting` or `closeListener` makes that poll fire. The listener
   ## is not shut down: that would discard the wake connection, and the
@@ -200,7 +210,7 @@ template beTryRoot*(call: untyped; completion: Continuation): bool =
   block:
     let accepted = admitTask()
     if accepted:
-      rootCompletion = completion
+      prepareRoot(rootAnchor, completion)
       let rootContinuation: Continuation = delay(call)
       rootContinuation.env[].caller = Continuation(fn: finishedRoot, env: addr rootAnchor)
       schedule(rootContinuation)

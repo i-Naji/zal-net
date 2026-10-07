@@ -8,7 +8,7 @@ type
     data*: nil BytesPtr
     len*: int
 
-var emptyByte: array[1, byte]
+let emptyByte = [0'u8]
 
 proc bytesPtr*(p: pointer): BytesPtr {.inline.} =
   ## View an existing non-nil address as bytes; the caller supplies its bounds.

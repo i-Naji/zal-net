@@ -1,3 +1,5 @@
+{.feature: "assumeSync".}
+# Shared state uses pool/lifecycle locks, atomics and publication barriers.
 ## Signals as events a task waits for, instead of handlers that run in
 ## signal context. `watchSignals` routes the chosen signals to a wake
 ## channel (the handler only writes one byte, async-signal-safe);
@@ -20,6 +22,7 @@
 import std/atomics
 import std/ticketlocks
 import zal_net/rt
+import zal_net/private/services
 import zal_net/raw/io
 import zal_net/private/sys/sock
 import zal_net/raw/socket
@@ -173,3 +176,6 @@ proc waitSignal*(timeoutMs = -1): Signal {.passive.} =
       parkPoll(gRd, {evRead}, deadline, res)
       if res <= 0: break
   discard atomicFetchSub(gUsers, 1, moSequentiallyConsistent)
+
+if not registerProcessService(stopSignals, joinSignals):
+  atomicStore(gReady, 3, moRelease)
