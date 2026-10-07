@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## Lifecycle: stopAccepting ends accept loops (AcceptClosed), and
 ## requestStop makes drainRuntime return.
 import std/assertions

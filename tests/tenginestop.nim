@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## Process shutdown drains standard engine tasks and their readiness waiters.
 import std/[assertions, syncio, atomics]
 import zal_net/[rt, datagram]

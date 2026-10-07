@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 import std/[assertions, syncio]
 import zal_net/rt, zal_net/raw/io, zal_net/rt/sync
 

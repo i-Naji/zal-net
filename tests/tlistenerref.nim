@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## Exact accept outcomes, retained listener owners and quiescent descriptor close.
 import std/[assertions, syncio]
 import zal_net/[rt, errors], zal_net/rt/[sync, cancel], zal_net/raw/io

@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## Retained managed owners, one waiter per direction, and drain-on-close.
 import std/[assertions, syncio]
 import zal_net/[rt, errors], zal_net/rt/sync

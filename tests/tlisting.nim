@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## A timed-out listing owns its result storage until the engine releases it.
 ## Internal setup seeds associations without network traffic or DNS timing.
 import std/[atomics, assertions, syncio]

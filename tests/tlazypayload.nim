@@ -8,7 +8,7 @@ var endings: int
 proc ended(c: Conn) =
   assert c.endReason == erEof or (defined(nnRelayFaultTest) and c.endReason == erError)
   discard atomicFetchAdd(endings, 1, moRelease)
-var hooks = ConnHooks(onEnd: ended)
+let hooks = ConnHooks(onEnd: ended)
 
 proc run(c: Conn) {.passive.} = startPumps(c)
 proc made(left, right: cint; framed: nil Framer = nil): Conn =
@@ -43,7 +43,7 @@ proc frameOpen(c: Conn; d: DirectionPtr): int =
 proc boundary(d: DirectionPtr): bool = d.off == d.fill
 proc seal(c: Conn; d: DirectionPtr): bool = false
 proc noClose(d: DirectionPtr) = discard
-var fixtureFramer = FramerObj(geometry: Geometry(head: 1, maxRecord: 64),
+let fixtureFramer = FramerObj(geometry: Geometry(head: 1, maxRecord: 64),
   open: frameOpen, atBoundary: boundary, seal: seal, closeSource: noClose, closeSink: noClose)
 
 proc finishPeers(client, sink: cint; expectedEnds: int) {.passive.} =

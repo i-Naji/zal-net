@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## Closing a signal watcher retains its descriptor while a passive wait borrows
 ## it, restores previous actions, and rejects late handlers after descriptor reuse.
 import std/[assertions, syncio]

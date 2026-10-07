@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## Notify, Event, Oneshot and Chan: same-loop and cross-thread wakes,
 ## permits, deadlines, cancellation, and a notify-vs-timeout race; the
 ## typed Channel[T] and Promise[T] over them.

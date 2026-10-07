@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 import zal_net/codecs/socksaddr
 ## The datagram engine end to end, with no framework: tunnel listeners
 ## over IPv4 and IPv6, a domain target (datagrams queued while it

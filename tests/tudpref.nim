@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## UDP owner transfer, operation cancellation, close drain and token reuse.
 import std/[assertions, syncio]
 import zal_net/[rt, errors], zal_net/rt/[sync, cancel, blocking]

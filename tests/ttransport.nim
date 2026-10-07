@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## Retained transport: owner lifetime, shared invalidation, results and drains.
 import std/[assertions, syncio]
 import zal_net/[rt, io]

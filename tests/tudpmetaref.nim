@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## Friendly ancillary I/O shares raw metadata and owner cancellation machinery.
 import std/[assertions, syncio]
 import zal_net/[rt, errors], zal_net/rt/[sync, cancel]

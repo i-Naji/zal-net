@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## TCP: an echo server on every loop (openArray sugar, half-close) for 50
 ## clients x 64 KiB; the idle limit and an operation deadline; a refused
 ## connect and a freed port; accept without serve; vectored I/O; Happy

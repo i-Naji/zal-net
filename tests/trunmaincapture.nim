@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## The root is started from regular application code with local arguments.
 import std/[assertions, syncio]
 import zal_net/private/sys/threads

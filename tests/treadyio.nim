@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## Ready sockets must honor deadlines and let other tasks run without EAGAIN.
 import std/[assertions, syncio]
 import zal_net

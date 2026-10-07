@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## The structs zal-net declares itself instead of importing (sys/types.nim
 ## and the public mirrors in net/sockaddr, net/mmsg, sys/sock and poller)
 ## have the sizes and field offsets their C definitions have (sys/nn_types.h,

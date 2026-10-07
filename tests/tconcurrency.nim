@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## Typed task arguments, retained slots, immutable copies and offload cleanup.
 import std/[assertions, syncio]
 import std/atomics

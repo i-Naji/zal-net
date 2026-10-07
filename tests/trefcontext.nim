@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## Compiler regression: Ref -> pointer casts retain without a paired drop.
 ## The restricted borrowed-context helper must preserve the Ref count.
 import std/[assertions, syncio]

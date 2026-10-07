@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## Connection errors, stable output owners and friendly constructor forwarding.
 import std/[assertions, syncio, envvars]
 import zal_net/[rt, errors], zal_net/rt/[sync, cancel, blocking]

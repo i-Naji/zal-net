@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## UDP: echo over IPv4 (an IPv4 destination on a dual-stack socket) and
 ## IPv6; a receive that times out; a connected socket; 32 datagrams each
 ## way in batches.

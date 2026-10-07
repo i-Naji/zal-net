@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 import zal_net/net/endpointdial
 ## A dial woken before its connect completes keeps waiting: it never hands
 ## back a socket that is not connected. (On Windows the shutdown hook

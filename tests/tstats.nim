@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## Sharded counters from loops and raw threads, a per-user counter set, and
 ## the async logger: level filtering, and a flood that must not block.
 import std/assertions

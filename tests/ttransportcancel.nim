@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 import zal_net/unsafe/streamview
 ## Public custom-transport cancellation and all dial/resolver entry points.
 import std/[assertions, syncio]

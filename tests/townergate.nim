@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## Borrower acknowledgement is not final cleanup. Close deadlines must still
 ## expire when the idle event is ready but retained cleanup has not finished.
 import std/[assertions, syncio]

@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## Spawning, readiness parks, deadlines, sleeps and yields on one loop;
 ## interruptFd ends a read parked on a pipe on another loop (loops backend).
 import std/[assertions, atomics, ticketlocks]

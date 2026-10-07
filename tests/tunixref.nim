@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## Stable Unix owners: cancelled operations preserve usability; closing drains.
 import std/[assertions, syncio, envvars]
 import zal_net/[rt, errors], zal_net/rt/[sync, cancel]

@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## Datagram boundaries, empty windows, truncation and directional error state.
 import std/[assertions, syncio]
 import zal_net/rt

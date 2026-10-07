@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## Streams: a TCP relay (splice on Linux, and the plain path) carries
 ## 4 MiB each way intact and forwards the half-close; a Unix-to-TCP relay
 ## (two stream types); a quiet direction outlives its stream's own idle

@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## Invalid channel dimensions, nested plain values and token release/cancel.
 import std/[atomics, assertions, syncio]
 import zal_net/rt/sync, zal_net/plain

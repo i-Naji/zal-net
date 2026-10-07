@@ -1,3 +1,4 @@
+{.feature: "assumeSync".}
 ## The relay with toy framers: records of [length:2][zero pad][payload XOR
 ## 0x5A][tail bytes, each the length's low byte], in two geometries: 18/16
 ## with 65535-byte records (Shadowsocks 2022's), and 4/4 with 4096-byte
