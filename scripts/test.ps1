@@ -16,7 +16,7 @@ $Workers = @($Workers | ForEach-Object { $_.Split(",") } | Where-Object { $_ })
 $Tests = @($Tests | ForEach-Object { $_.Split(",") } | Where-Object { $_ })
 if ($Tests.Count -eq 0 -and $Suite -ne "full") {
   switch ($Suite) {
-    "fast" { $Tests = @("treadyio", "townership", "ttcpref", "tunixref", "tapplicationtcp", "tapplicationunix", "tapplicationudp", "tapplicationserve", "ttransport", "ttransportcancel") }
+    "fast" { $Tests = @("treadyio", "townership", "ttcpref", "tunixref", "tapplicationtcp", "tapplicationunix", "tapplicationudp", "tapplicationserve", "ttransport", "ttransportcancel", "tservicedrain") }
     "stress" { $Tests = @("tshutdown", "truntimedrain", "tstdhandoff", "tenginereadiness", "tenginecapacity", "tenginestop", "tengines", "tdatagram") }
     "platform" { $Tests = @("tinterfaces", "tip", "ticmp", "ttun", "turingclose") }
   }
@@ -57,6 +57,7 @@ foreach ($be in @("runtime")) {
     }
     if ($compileExit -ne 0) {
       "FAIL build $be $name (see $log)"
+      Get-Content $log -Tail 40
       $fail = 1
       continue
     }
@@ -68,11 +69,14 @@ foreach ($be in @("runtime")) {
       $null = $p.Handle          # without it ExitCode stays empty
       if (-not $p.WaitForExit($TimeoutSec * 1000)) {
         $p.Kill()
+        $p.WaitForExit()
         "FAIL $be $name workers=$w (timeout, see $out)"
         $fail = 1
+        Get-Content $out, "$out.err"
       } elseif ($p.ExitCode -ne 0) {
         "FAIL $be $name workers=$w (rc=$($p.ExitCode), see $out)"
         $fail = 1
+        Get-Content $out, "$out.err"
       } else {
         "ok   $be $name workers=$w"
       }

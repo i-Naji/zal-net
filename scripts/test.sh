@@ -16,7 +16,7 @@ mkdir -p "$BUILD_DIR"
 BUILD_DIR=$(cd "$BUILD_DIR" && pwd)
 if [ -z "${TESTS:-${ONLY:-}}" ]; then
   case "${SUITE:-fast}" in
-    fast) TESTS="treadyio townership ttcpref tunixref tapplicationtcp tapplicationunix tapplicationudp tapplicationserve ttransport ttransportcancel" ;;
+    fast) TESTS="treadyio townership ttcpref tunixref tapplicationtcp tapplicationunix tapplicationudp tapplicationserve ttransport ttransportcancel tservicedrain" ;;
     full) ;;
     stress) TESTS="tshutdown truntimedrain tstdhandoff tenginereadiness tenginecapacity tenginestop tengines tdatagram" ;;
     platform) TESTS="tinterfaces tip ticmp ttun turingclose" ;;
@@ -46,6 +46,7 @@ for be in runtime; do
     # The incremental cache has produced stale code after signature changes: always --ff.
     if ! XDG_CACHE_HOME="$BUILD_DIR/$be/c-cache-$name" "$NIMONY" c --ff $flag "$@" --nimcache:"$BUILD_DIR/$be/cache-$name" -o:"$out" "$src" >"$out.log" 2>&1; then
       echo "FAIL build $be $name (see $out.log)"
+      tail -40 "$out.log"
       fail=1
       continue
     fi
@@ -56,6 +57,7 @@ for be in runtime; do
         echo "ok   $be $name workers=$w"
       else
         echo "FAIL $be $name workers=$w (see $out.w$w.log)"
+        cat "$out.w$w.log"
         fail=1
         case_failed=1
       fi

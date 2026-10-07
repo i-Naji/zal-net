@@ -4,3 +4,5 @@
 
 - Initial standard-runtime package.
 - Use Nimony `0a48dbd4` and configure the standard pool through ZAL_WORKERS.
+- Use Nimony `d5fc40e3` for delayed argument ownership and iterator cleanup.
+- Join process-owned services before standard-pool shutdown.
