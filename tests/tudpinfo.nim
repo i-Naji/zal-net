@@ -8,6 +8,7 @@ import zal_net/rt
 import zal_net/raw/io
 import zal_net/net/address
 import zal_net/raw/udp
+when defined(macosx): import zal_net/net/interfaces
 
 proc main() {.passive.} =
   var buf = default(array[256, byte])
@@ -34,21 +35,27 @@ proc main() {.passive.} =
   assert recvFrom(s, buf, from0) == 4 and $ip(from0) == "127.0.0.1"
   echo "PASS a reply sent from a chosen source address"
 
-  # Multicast through the default interface, looped back to this host.
+  # Use loopback on macOS rather than depending on the host's multicast route.
+  when defined(macosx):
+    let multicastInterface = indexOf("lo0")
+    assert multicastInterface > 0
+  else:
+    let multicastInterface = 0'u32
   var group = default(IpAddress)
   assert parseIp("239.255.42.99", group)
   var m = bindUdp(0, "0.0.0.0", timeoutMs = 1500)
   assert m.ok and enableInfo(m)
-  if not joinGroup(m, group):
+  if not joinGroup(m, group, multicastInterface):
     echo "SKIP no multicast-capable interface here"
     quit 0
   var sender = bindUdp(0, "0.0.0.0")
+  if multicastInterface > 0: assert setMulticastInterface(sender, multicastInterface)
   assert setMulticastLoop(sender, true) and setMulticastTtl(sender, 1)
   assert sendTo(sender, msg, initSocketAddress(group, port(localAddress(m)))) == 4
   let n = recvFrom(m, buf, info)
   assert n == 4, $n
   assert $info.destination == "239.255.42.99" and info.ttl == 1, $info.destination & " " & $info.ttl
-  assert leaveGroup(m, group) and setBroadcast(sender)
+  assert leaveGroup(m, group, multicastInterface) and setBroadcast(sender)
   echo "PASS multicast: joined, looped back with the group as destination and TTL 1; broadcast allowed"
   quit 0
 
