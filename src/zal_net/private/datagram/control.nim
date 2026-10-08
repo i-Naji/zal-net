@@ -197,7 +197,7 @@ template drainInbox(e: ptr DatagramEngine; now: int64) =
     releaseJob(j)   # the delivered reference
     j = next
 
-proc tick(e: ptr DatagramEngine; now: int64) =
+proc tick(e: ptr DatagramEngine; now: int64; replies: var MmsgBatch) =
   ## Expire idle associations, end those whose owner is not alive, report
   ## bytes; refresh leg servers' addresses.
   refreshPx(e, now)
@@ -208,7 +208,10 @@ proc tick(e: ptr DatagramEngine; now: int64) =
       if not stillOwned(e, a):          # before idle: a kick is the better reason
         dropAssoc(e, i, EndKicked)
       elif now - a.lastUnix > e.natSec:
-        dropAssoc(e, i, EndIdle)
+        # A delayed readiness continuation does not make queued traffic idle.
+        if a.legFd >= 0: legReady(e, i, replies, now)
+        if a.pxFd >= 0: pxReady(e, i, replies, now)
+        if now - a.lastUnix > e.natSec: dropAssoc(e, i, EndIdle)
       else:
         flushBytes(e, a)
     i = i + 1

@@ -7,3 +7,4 @@
 - Use Nimony `d5fc40e3` for delayed argument ownership and iterator cleanup.
 - Join process-owned services before standard-pool shutdown.
 - Use Nimony `aa01546a` for the platform I/O update.
+- Drain queued datagram replies before idle expiry.

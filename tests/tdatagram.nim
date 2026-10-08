@@ -99,6 +99,7 @@ var gEchoFd: cint
 var gEchoStop: int      # atomic
 var gEchoDone: int      # atomic
 var gEchoCount: int     # atomic: datagrams echoed
+var gEchoHold, gEchoWaiting: int # atomic
 
 proc echoMain(arg: nil pointer) {.nimcall.} =
   var buf = newSeq[byte](70000)
@@ -112,6 +113,9 @@ proc echoMain(arg: nil pointer) {.nimcall.} =
       let raw = cast[ptr UncheckedArray[byte]](addr sa.ss)
       buf[n] = raw[2]
       buf[n + 1] = raw[3]
+      if atomicLoad(gEchoHold, moAcquire) != 0:
+        atomicStore(gEchoWaiting, 1, moRelease)
+        while atomicLoad(gEchoHold, moAcquire) != 0: sleepUs(1000)
       discard sockSendto(gEchoFd, addr buf[0], csize_t(n + 2), 0, addr sa.ss, sl)
       discard atomicFetchAdd(gEchoCount, 1, moRelaxed)
   atomicStore(gEchoDone, 1, moRelease)
@@ -348,6 +352,24 @@ while got < 50:
   got = got + 1
 assert got == 50
 echo "PASS a burst of 50 datagrams comes back whole"
+
+# Hold a destination reply until the consumer pauses across its idle deadline.
+proc echoWaiting(): bool = atomicLoad(gEchoWaiting, moAcquire) != 0
+proc pauseForQueuedReply(e: ptr DatagramEngine; m: ptr EngineMsg) =
+  atomicStore(gEchoHold, 0, moRelease)
+  sleepUs(2_100_000)
+let delayedClient = udpSock("127.0.0.1")
+atomicStore(gEchoHold, 1, moRelease)
+sendDg(delayedClient, to4, bytesOf("queued"))
+assert waitFor(echoWaiting, 2000)
+let pauseMessage = newEngineMsg(MsgCall)
+pauseMessage.call = pauseForQueuedReply
+postEngineMsg(eng, pauseMessage)
+assert waitEngineMsg(pauseMessage, 5000)
+releaseEngineMsg(pauseMessage)
+assert recvDg(delayedClient, buf, 5000) == 8
+discard closeRaw(delayedClient)
+echo "PASS queued replies survive a delayed idle scan"
 
 # 10k associations through expiry (NAT timeout 1 s here).
 var soft = 0

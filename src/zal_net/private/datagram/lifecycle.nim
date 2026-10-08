@@ -12,11 +12,11 @@ proc dispatchSocket(e: ptr DatagramEngine; tag: uint64; inB, legB: var MmsgBatch
   elif int(tag) < e.listeners.len and e.listeners[int(tag)].used:
     inboundReady(e, int(tag), inB, now)
 
-proc refreshEngine(e: ptr DatagramEngine; now: int64; lastTick: var int64) =
+proc refreshEngine(e: ptr DatagramEngine; now: int64; lastTick: var int64; replies: var MmsgBatch) =
   let h = e.hooks
   if h != nil and h.refresh != nil: h.refresh(e)
   if now != lastTick:
-    tick(e, now)
+    tick(e, now, replies)
     lastTick = now
 
 proc runEngine(e: ptr DatagramEngine; inB, legB: var MmsgBatch) {.passive.} =
@@ -27,12 +27,12 @@ proc runEngine(e: ptr DatagramEngine; inB, legB: var MmsgBatch) {.passive.} =
     var event = takeReady(ready)
     if event.registration == nil: event = nextReady(ready, afterMs(1000))
     let now = unixSec()
-    refreshEngine(e, now, lastTick)
     let registration = event.registration
     if registration != nil and active(registration):
       if event.tag == WakeTag: drainInbox(e, now)
       else: dispatchSocket(e, event.tag, inB, legB, now)
       acknowledge(registration)
+    refreshEngine(e, now, lastTick, legB)
     if e.retired.len != 0: drainRetired(e)
 proc shutdownEngine(e: ptr DatagramEngine) =
   var i = 0
