@@ -8,3 +8,4 @@
 - Join process-owned services before standard-pool shutdown.
 - Use Nimony `aa01546a` for the platform I/O update.
 - Drain queued datagram replies before idle expiry.
+- Use Nimony `d5396682` for closure layout and readiness retry fixes.

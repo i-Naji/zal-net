@@ -1,4 +1,4 @@
-## Application datagrams with retained loop-affine owners and enum errors.
+## Application datagrams with retained owners and enum errors.
 ## Every send emits one datagram, including an empty buffer. A zero receive
 ## count describes an empty datagram/window, never stream EOF. An empty receive
 ## window still consumes one datagram. Batch APIs stay explicit.

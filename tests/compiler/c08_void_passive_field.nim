@@ -1,6 +1,6 @@
 {.feature: "lenientnils".}
 ## Calling a `void` passive proc through a proc-typed object field generates C with one argument too many. Workaround: give the proc type a result (`TaskFn` returns int).
-## flags: --path:src -d:nnLoops
+## flags: --path:src
 import std/syncio
 import zal_net/rt
 import zal_net/raw/io

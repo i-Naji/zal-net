@@ -1,6 +1,6 @@
 {.feature: "lenientnils".}
 ## Suspending inside a `for` loop in a passive proc (reported by hashi). Workaround: `while` loops.
-## flags: --path:src -d:nnLoops
+## flags: --path:src
 import std/syncio
 import zal_net/rt
 import zal_net/raw/io

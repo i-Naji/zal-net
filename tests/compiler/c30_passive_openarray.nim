@@ -1,6 +1,6 @@
 {.feature: "lenientnils".}
 ## A guard, fixed upstream (Nimony's tests/nimony/valgrind/tpassive_openarray.nim): an `openArray` parameter of a passive proc lost its pointer (the length survived) across a suspension. zal-net's passive procs still take `pointer` + length; this repro must stay FIXED before that rule is relaxed.
-## flags: --path:src -d:nnLoops
+## flags: --path:src
 import std/syncio
 import zal_net/rt
 import zal_net/raw/io

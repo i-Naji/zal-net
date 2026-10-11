@@ -1,5 +1,5 @@
 ## Public foundation for protocol libraries. No private imports are required.
-## Owners are loop-affine; raw numeric syscalls stay in the explicit raw layer.
+## Retained owners share admission; numeric syscalls stay in the raw layer.
 import zal_net/[streamconcepts, io, ownership]
 import zal_net/net/transport
 import zal_net/foundation/[tcp, tcplistener]

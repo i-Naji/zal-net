@@ -1,6 +1,6 @@
 {.feature: "lenientnils".}
 ## `default(T)` for an unconstrained `T` inside a generic passive proc does not resolve. Workaround: write into `result.field` (typed Channel.recv in sync.nim).
-## flags: --path:src -d:nnLoops
+## flags: --path:src
 import std/syncio
 import zal_net/rt
 import zal_net/raw/io

@@ -1,6 +1,6 @@
 {.feature: "lenientnils".}
 ## `const X = low(int)` used by a passive proc crashes nimsem with a RangeDefect (found writing startTaskR). Workaround: another sentinel.
-## flags: --path:src -d:nnLoops
+## flags: --path:src
 import std/syncio
 import zal_net/rt
 import zal_net/raw/io

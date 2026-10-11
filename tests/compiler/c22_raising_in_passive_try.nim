@@ -1,6 +1,6 @@
 {.feature: "lenientnils".}
 ## A raising call returning a string (`readFile`) in a `try` inside a passive proc generates C that does not compile. Workaround: wrap it in a regular proc (`slurp` in tstats.nim).
-## flags: --path:src -d:nnLoops
+## flags: --path:src
 import std/syncio
 import zal_net/rt
 import zal_net/raw/io
