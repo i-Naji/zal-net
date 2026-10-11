@@ -16,14 +16,14 @@ cd "$HERE"
 MODE=${MODE:-normal}
 OUT=$HERE/build/stdlib-contract/$MODE
 mkdir -p "$OUT"
-set -- --mm:atomicArc -d:useMimalloc --path:src
+set -- --mm:atomicArc -d:useMimalloc --path:src ${NIMFLAGS:-}
 case "$MODE" in
   normal) ;;
   release) set -- "$@" -d:release ;;
   asan) set -- "$@" --passC:-fsanitize=address,undefined --passC:-DMI_TRACK_ASAN=1 --passC:-fno-omit-frame-pointer --passL:-fsanitize=address,undefined ;;
   *) echo "unknown MODE: $MODE" >&2; exit 2 ;;
 esac
-for TEST in treadiness tadmission tdrain tcontinuations; do
+for TEST in treadiness tadmission tdrain tcontinuations tretry; do
   XDG_CACHE_HOME="$OUT/c-cache-$TEST" "$ROOT/bin/nimony" c --ff "$@" --nimcache:"$OUT/cache-$TEST" -o:"$OUT/$TEST" \
     "tests/stdlib/$TEST.nim" >"$OUT/$TEST-build.log" 2>&1 || {
       cat "$OUT/$TEST-build.log" >&2; exit 1;
