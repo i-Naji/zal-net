@@ -277,6 +277,8 @@ proc relay*[A: DuplexStream; B: DuplexStream](a: A; b: B; idleMs = 60_000; splic
   retain(tok)
   defer: release(tok)
   let st = cast[ptr RelayState](alloc0(sizeof(RelayState)))
+  if st == nil:
+    return RelayStats(aToB: CopyStats(error: -12), bToA: CopyStats(error: -12))   # ENOMEM
   touchIo(addr st.act)
   if not trySpawnTask(backward(a, b, st, idleMs, splice, tok)):
     dealloc(st)

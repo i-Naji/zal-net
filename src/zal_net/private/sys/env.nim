@@ -3,6 +3,8 @@
 import std/envvars
 import std/syncio
 
+const MaxWorkers* = 256
+
 proc workersFromEnv*(name: string): int =
   ## A positive worker count from environment variable `name`, or 0 when it
   ## is unset. Quits on a malformed value.
@@ -12,6 +14,6 @@ proc workersFromEnv*(name: string): int =
   for c in value:
     if c < '0' or c > '9': quit name & " must be 1..256"
     n = n * 10 + ord(c) - ord('0')
-    if n > 256: quit name & " must be 1..256"
+    if n > MaxWorkers: quit name & " must be 1..256"
   if n < 1: quit name & " must be 1..256"
   result = n

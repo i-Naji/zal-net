@@ -118,9 +118,9 @@ include zal_net/private/datagram/lifecycle
 proc newDatagramEngine*(natSec = 300; batch = 64; hooks: nil ptr EngineHooks = nil;
                         listenerLimit = MaxEngineListeners; maxAssocs = MaxAssocs;
                         pendingBytes = PendCap; controlLimit = 4096; provider: nil pointer = nil; adaptiveBatching = true): nil ptr DatagramEngine =
-  ## An engine, not yet running; nil when its poller or inbox cannot be
-  ## made. C memory: it is retained until the engine stops. `hooks` (may be
-  ## nil) route and account for its associations.
+  ## An engine, not yet running; nil for an out-of-range limit or when its
+  ## memory or inbox cannot be made. C memory: it is retained until the
+  ## engine stops. `hooks` (may be nil) route and account for its associations.
   result = nil
   if listenerLimit < 1 or listenerLimit > (1 shl 20) or maxAssocs < 1 or
      maxAssocs > (1 shl 24) or (maxAssocs and (maxAssocs - 1)) != 0 or

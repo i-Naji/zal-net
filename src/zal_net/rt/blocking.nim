@@ -91,7 +91,7 @@ var gQueued: int
 var gMaxQueued = 4096
 var gPoolState: int          # atomic: 0 none, 1 starting, 2 running, 3 joined
 let gWake = newEventCount()
-var gWorkers: array[256, ThreadHandle]
+var gWorkers: array[MaxWorkers, ThreadHandle]
 var gWorkerCount: int
 var gActiveWorkers: int
 var gPoolClosing: int
