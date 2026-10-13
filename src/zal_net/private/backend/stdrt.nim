@@ -91,7 +91,7 @@ var gAdmission: TicketLock
 var taskAnchor = default(CoroutineBase)
 var rootAnchor = default(CoroutineBase)
 
-proc beStopping*(): bool {.inline.} = atomicLoad(gStopReq, moAcquire) != 0
+proc beStopping*(): bool {.inline.} = atomicLoad(gStopReq, moSequentiallyConsistent) != 0
 
 proc admitTask(): bool =
   gAdmission.acquire()
@@ -121,12 +121,14 @@ proc tracked(c: Continuation): Continuation =
   result = c
   result.env[].caller = Continuation(fn: finishedTask, env: addr taskAnchor)
 
-proc beInit*() = initIoRing()
+proc beInit*() =
+  initIoRing()
+  initParked()
 
 proc beStop*() =
   ## Signal-safe request. The process runner performs joining after tasks drain.
   closeServiceAdmission()
-  atomicStore(gStopReq, 1, moRelease)
+  atomicStore(gStopReq, 1, moSequentiallyConsistent)
 
 proc beRun*() =
   ## The main thread alone services the standard foreign lane. Library-owned
