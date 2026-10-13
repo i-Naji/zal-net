@@ -14,6 +14,7 @@ import std/ioring
 import zal_net/rt/time
 import zal_net/private/core/waitq
 import zal_net/private/backend/efdpool
+import zal_net/private/core/parked
 import zal_net/private/services
 
 proc closeFd*(fd: cint) =
@@ -131,7 +132,11 @@ proc beRun*() =
   ## The main thread alone services the standard foreign lane. Library-owned
   ## tasks retain an admission until their complete passive body has returned.
   var completions = default(array[16, IoCompletion])
+  var swept = false
   while true:
+    if not swept and beStopping():
+      swept = true
+      interruptParked()
     gAdmission.acquire()
     let drained = beStopping() and atomicLoad(gActive, moAcquire) == 0 and
       atomicLoad(gResuming, moAcquire) == 0
@@ -177,7 +182,7 @@ proc runtimeWorkers*(): int = workerCount
 
 proc onLoop*(): bool {.inline.} = isPoolWorker()
 
-template beParkFd*(fd: cint; write, listener: bool; deadline: Deadline; res: var int) =
+template beParkFd*(fd: cint; write, listener: bool; deadline: Deadline; res: var int; sliced = true) =
   block:
     res = -1
     var dir = {evRead}
@@ -186,7 +191,7 @@ template beParkFd*(fd: cint; write, listener: bool; deadline: Deadline; res: var
     var slice = SliceMs
     while true:
       let cont = delay()
-      let step = if until <= afterMs(SliceMaxMs): until else: earlier(until, afterMs(slice))
+      let step = if not sliced or until <= afterMs(SliceMaxMs): until else: earlier(until, afterMs(slice))
       discard submitPollAdd(fd, step, dir, grouped(cont), addr res)
       suspend()
       if beStopping():

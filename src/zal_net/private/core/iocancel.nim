@@ -6,6 +6,7 @@ import zal_net/rt, zal_net/rt/cancel
 import zal_net/errors
 import zal_net/raw/io
 import zal_net/private/runtime
+import zal_net/private/core/parked
 
 const CancelPollMs* = 10
 const CancelPollMaxMs* = 200   ## an idle park backs off from CancelPollMs to this
@@ -40,19 +41,26 @@ template parkCancellable*(fd: cint; events: IoEvents; deadline: Deadline;
                           tokens: IoCancellation; outcome: var int) =
   block:
     var slice = CancelPollMs
+    # Only the owner's stop token: close and runtime stop interrupt the socket.
+    let owned = tokens.operation == nil and tokens.peerStop == nil and
+      tokens.ownerStop != nil and enterParked(fd)
     while true:
+      if cancelled(tokens) or (owned and stopping()):
+        outcome = ECancelled
+        break
+      if owned:
+        parkPollOwned(fd, events, deadline, outcome)
+      else:
+        parkPoll(fd, events, pollDeadline(deadline, tokens, slice), outcome)
       if cancelled(tokens):
         outcome = ECancelled
         break
-      parkPoll(fd, events, pollDeadline(deadline, tokens, slice), outcome)
-      if cancelled(tokens):
-        outcome = ECancelled
-        break
-      if (tokens.operation != nil or tokens.ownerStop != nil or tokens.peerStop != nil) and
+      if not owned and (tokens.operation != nil or tokens.ownerStop != nil or tokens.peerStop != nil) and
           outcome == IoTimedOut and monoNow() < deadline:
         slice = min(slice * 2, CancelPollMaxMs)
         continue
       break
+    if owned: leaveParked(fd)
 
 proc pollDeadline*(deadline: Deadline; tok: nil CancelToken; ms = CancelPollMs): Deadline {.inline.} =
   if tok == nil: deadline else: earlier(deadline, afterMs(ms))

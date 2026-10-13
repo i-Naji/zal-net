@@ -16,3 +16,4 @@
 - Run the allocator's thread hooks on library-started threads.
 - Build without -d:useMimalloc; the native allocator is supported.
 - Back off cancellation and readiness polling for idle connections.
+- Park owned sockets on their real deadline: idle connections no longer poll.

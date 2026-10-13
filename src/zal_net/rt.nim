@@ -133,6 +133,11 @@ template parkPoll*(fd: cint; events: IoEvents; deadline: Deadline; res: var int)
   ## IoTimedOut, ECancelled (closed while parked) or -1.
   beParkFd(fd, evWrite in events, false, deadline, res)
 
+template parkPollOwned*(fd: cint; events: IoEvents; deadline: Deadline; res: var int) =
+  ## `parkPoll` for a socket whose owner close and runtime stop interrupt it:
+  ## one poll on the real deadline.
+  beParkFd(fd, evWrite in events, false, deadline, res, false)
+
 template parkReady*(fd: cint; events: IoEvents; activity: nil ptr int64;
                     timeoutMs: int; res: var int) =
   ## Like `parkPoll`, but the idle deadline follows the shared activity
