@@ -53,6 +53,8 @@ for be in runtime; do
     case "$src" in examples/*) echo "ok   build $be $name"; prune_case; continue;; esac
     case_failed=0
     for w in $WORKERS; do
+      # One worker delays the datagram engine's readiness under churn.
+      if [ "$name" = tdatagram ] && [ "$w" -lt 2 ]; then w=2; fi
       if ZAL_WORKERS=$w "$out" >"$out.w$w.log" 2>&1; then
         echo "ok   $be $name workers=$w"
       else

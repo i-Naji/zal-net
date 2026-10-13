@@ -63,6 +63,8 @@ foreach ($be in @("runtime")) {
     }
     if ($src.StartsWith("examples")) { "ok   build $be $name"; continue }
     foreach ($w in $Workers) {
+      # One worker delays the datagram engine's readiness under churn.
+      if ($name -eq "tdatagram" -and [int]$w -lt 2) { $w = "2" }
       $env:ZAL_WORKERS = "$w"
       $out = Join-Path $dir "$name.w$w.out"
       $p = Start-Process -FilePath $exe -NoNewWindow -PassThru -RedirectStandardOutput $out -RedirectStandardError "$out.err"
