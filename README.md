@@ -22,5 +22,5 @@ discard runMain(main())
 ```
 
 Uses `std/ioring` and `std/threadpool`. Build with the Nimony revision in
-`ci/nimony.ref`, `--mm:atomicArc` and `-d:useMimalloc`.
+`ci/nimony.ref` and `--mm:atomicArc`. `-d:useMimalloc` is optional.
 See [build and ownership](docs/usage.md). MIT license.

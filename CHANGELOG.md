@@ -13,3 +13,5 @@
 - Drain queued resumptions before pool shutdown.
 - Use Nimony `2593bf85` for symbol lookup and raises fixes.
 - Return an error from relay when its state cannot be allocated.
+- Run the allocator's thread hooks on library-started threads.
+- Build without -d:useMimalloc; the native allocator is supported.

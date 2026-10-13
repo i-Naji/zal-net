@@ -1,7 +1,5 @@
 ## Standard-pool adapter. Nonblocking native I/O borrows caller buffers;
 ## only readiness and timers enter std/ioring. No std reactor state is changed.
-when defined(nimNativeAlloc):
-  {.error: "Standard runtime handles require -d:useMimalloc: the pinned native allocator cannot outlive an allocating thread".}
 when not defined(gcAtomicArc):
   {.error: "Standard runtime handles require --mm:atomicArc".}
 
