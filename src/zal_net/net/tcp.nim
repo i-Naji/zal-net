@@ -2,8 +2,8 @@ from zal_net/io import IoResult, ioResult
 from zal_net/buffers import dataPtr
 ## Application TCP. Stable owners, ordinary operations and ErrorCode raises.
 ## Use raw/tcp for manual storage, native codes and engine integration.
-## Pending operations retain their owner. Custom-loop handles keep affinity;
-## standard-runtime handles synchronize admission across pool workers.
+## Pending operations retain their owner. Admission is synchronized across
+## pool workers.
 import zal_net/foundation/tcp as owners
 import zal_net/foundation/tcplistener as listeners
 import zal_net/net/address

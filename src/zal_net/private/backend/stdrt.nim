@@ -46,9 +46,40 @@ proc prepareRoot(root: var CoroutineBase; completion: Continuation) {.sync.} =
   {.cast(assumeSync).}:
     root.caller = completion
 
+const ResumeSteps = 128
+# A wrapper may still have completion work after its child releases admission.
+var gResuming: int
+var resumeAnchor = default(CoroutineBase)
+
+proc finishedResume(frame: ptr CoroutineBase): Continuation {.nimcall.} =
+  discard atomicFetchSub(gResuming, 1, moAcquireRelease)
+  result = default(Continuation)
+
+proc resumeChain(c: Continuation) {.passive.} =
+  # Preserve the child's completion caller. Bound immediate steps to return
+  # control to the pool and limit stack growth in generated passive loops.
+  var pending = c
+  var steps = 0
+  # Shared pools need frequent readiness turns under concurrent load.
+  let budget = if workerCount == 1: ResumeSteps else: 2
+  while pending.fn != nil:
+    pending = advance(pending)
+    inc steps
+    if pending.fn != nil and steps == budget:
+      let resume = delay()
+      if isPoolWorker(): submit(resume)
+      else: discard submitNop(never, resume)
+      suspend()
+      steps = 0
+
+proc grouped(c: Continuation): Continuation =
+  discard atomicFetchAdd(gResuming, 1, moAcquireRelease)
+  result = delay(resumeChain(c))
+  result.env[].caller = Continuation(fn: finishedResume, env: addr resumeAnchor)
+
 proc schedule(c: Continuation) =
   if isPoolWorker() or getThreadId() == entryThread:
-    submit(c)
+    submit(grouped(c))
   else:
     # Message handoff to the process runner. A foreign thread never polls a
     # standard lane or runs a passive I/O continuation through caller-runs.
@@ -72,7 +103,8 @@ proc admitCleanupTask(): bool =
   ## runner and this check share the lock, so cleanup cannot enter after drain.
   gAdmission.acquire()
   result = atomicLoad(gFinished, moAcquire) == 0 and
-    (not beStopping() or atomicLoad(gActive, moAcquire) > 0)
+    (not beStopping() or atomicLoad(gActive, moAcquire) > 0 or
+      atomicLoad(gResuming, moAcquire) > 0)
   if result: discard atomicFetchAdd(gActive, 1, moAcquireRelease)
   gAdmission.release()
 
@@ -101,13 +133,14 @@ proc beRun*() =
   var completions = default(array[16, IoCompletion])
   while true:
     gAdmission.acquire()
-    let drained = beStopping() and atomicLoad(gActive, moAcquire) == 0
+    let drained = beStopping() and atomicLoad(gActive, moAcquire) == 0 and
+      atomicLoad(gResuming, moAcquire) == 0
     gAdmission.release()
     if drained and joinProcessServices(): break
     if beStopping(): discard joinProcessServices()
     var incoming = default(array[64, Continuation])
     let count = dequeueExternal(external, incoming)
-    for i in 0..<count: submit(incoming[i])
+    for i in 0..<count: submit(grouped(incoming[i]))
     discard pollCompletions(completions)
     sleepUs(1000)
   shutdown()
@@ -152,7 +185,7 @@ template beParkFd*(fd: cint; write, listener: bool; deadline: Deadline; res: var
     let until = deadline
     while true:
       let cont = delay()
-      discard submitPollAdd(fd, earlier(until, afterMs(10)), dir, cont, addr res)
+      discard submitPollAdd(fd, earlier(until, afterMs(10)), dir, grouped(cont), addr res)
       suspend()
       if beStopping():
         res = ECancelled
@@ -170,7 +203,7 @@ template beParkFd*(fd: cint; write, listener: bool; deadline: Deadline; res: var
       # writable socket from a broken one, and the pause keeps a socket
       # with a full buffer from spinning while EPOLLRDHUP stays set.
       let pause = delay()
-      discard submitTimeout(afterMs(1), pause)
+      discard submitTimeout(afterMs(1), grouped(pause))
       suspend()
       res = toEventMask(dir)
 
@@ -179,7 +212,7 @@ template beParkUntil*(deadline: Deadline) =
     let until = deadline
     while not beStopping() and monoNow() < until:
       let cont = delay()
-      discard submitTimeout(earlier(until, afterMs(10)), cont)
+      discard submitTimeout(earlier(until, afterMs(10)), grouped(cont))
       suspend()
 
 template beYield*() =
@@ -187,8 +220,8 @@ template beYield*() =
   ## after this step returns, so it cannot race the suspending frame.
   block:
     let cont = delay()
-    if isPoolWorker(): submit(cont)
-    else: discard submitNop(never, cont)
+    if isPoolWorker(): submit(grouped(cont))
+    else: discard submitNop(never, grouped(cont))
     suspend()
 
 template beTrySpawn*(call: untyped): bool =
@@ -218,7 +251,7 @@ template beTryRoot*(call: untyped; completion: Continuation): bool =
 
 proc beStartInline*(c: Continuation) =
   # complete now owns a Join; advance preserves our existing completion caller.
-  var pending = c
+  var pending = grouped(c)
   while pending.fn != nil:
     pending = advance(pending)
 
@@ -234,10 +267,10 @@ proc stageResume(c: Continuation) =
   ## A resume must become visible only after its current passive step returns.
   ## Workers stage on their private ring. The process runner stages through its
   ## own I/O lane, which only that thread polls after returning from this step.
-  if isPoolWorker(): submit(c)
+  if isPoolWorker(): submit(grouped(c))
   else:
     assert getThreadId() == entryThread, "passive waits require a pool worker or the process runner"
-    discard submitNop(never, c)
+    discard submitNop(never, grouped(c))
 
 proc beSchedule*(c: Continuation) =
   stageResume(c)
@@ -249,7 +282,7 @@ proc bePrepareNode*(n: ptr WaitNode): bool =
 proc observeNode(n: ptr WaitNode; deadline: Deadline) {.passive.} =
   while atomicLoad(n.state, moAcquire) == nsParked:
     let wake = delay()
-    discard submitPollAdd(n.efd, earlier(deadline, afterMs(10)), {evRead}, wake, addr n.ringRes)
+    discard submitPollAdd(n.efd, earlier(deadline, afterMs(10)), {evRead}, grouped(wake), addr n.ringRes)
     suspend()
     if beStopping():
       if tryClaim(n, wrClosed): atomicStore(n.state, nsFired, moRelease)

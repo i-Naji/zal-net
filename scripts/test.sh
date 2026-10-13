@@ -16,7 +16,7 @@ mkdir -p "$BUILD_DIR"
 BUILD_DIR=$(cd "$BUILD_DIR" && pwd)
 if [ -z "${TESTS:-${ONLY:-}}" ]; then
   case "${SUITE:-fast}" in
-    fast) TESTS="treadyio townership ttcpref tunixref tapplicationtcp tapplicationunix tapplicationudp tapplicationserve ttransport ttransportcancel tservicedrain" ;;
+    fast) TESTS="tcontinuations tcompletiondrain treadyio townership ttcpref tunixref tapplicationtcp tapplicationunix tapplicationudp tapplicationserve ttransport ttransportcancel tservicedrain" ;;
     full) ;;
     stress) TESTS="tshutdown truntimedrain tstdhandoff tenginereadiness tenginecapacity tenginestop tengines tdatagram" ;;
     platform) TESTS="tinterfaces tip ticmp ttun turingclose" ;;
