@@ -15,3 +15,4 @@
 - Return an error from relay when its state cannot be allocated.
 - Run the allocator's thread hooks on library-started threads.
 - Build without -d:useMimalloc; the native allocator is supported.
+- Back off cancellation and readiness polling for idle connections.

@@ -45,6 +45,8 @@ proc prepareRoot(root: var CoroutineBase; completion: Continuation) {.sync.} =
     root.caller = completion
 
 const ResumeSteps = 128
+const SliceMs = 10
+const SliceMaxMs = 200
 # A wrapper may still have completion work after its child releases admission.
 var gResuming: int
 var resumeAnchor = default(CoroutineBase)
@@ -181,16 +183,19 @@ template beParkFd*(fd: cint; write, listener: bool; deadline: Deadline; res: var
     var dir = {evRead}
     if write: dir = {evWrite}
     let until = deadline
+    var slice = SliceMs
     while true:
       let cont = delay()
-      discard submitPollAdd(fd, earlier(until, afterMs(10)), dir, grouped(cont), addr res)
+      let step = if until <= afterMs(SliceMaxMs): until else: earlier(until, afterMs(slice))
+      discard submitPollAdd(fd, step, dir, grouped(cont), addr res)
       suspend()
       if beStopping():
         res = ECancelled
         break
       if res == time.IoTimedOut and monoNow() < until:
         # A polling slice is not readiness. Keep the original deadline so
-        # callers with relative idle timeouts cannot restart it every 10 ms.
+        # callers with relative idle timeouts cannot restart it every slice.
+        slice = min(slice * 2, SliceMaxMs)
         continue
       break
     if res == 0:
@@ -208,10 +213,12 @@ template beParkFd*(fd: cint; write, listener: bool; deadline: Deadline; res: var
 template beParkUntil*(deadline: Deadline) =
   block:
     let until = deadline
+    var slice = SliceMs
     while not beStopping() and monoNow() < until:
       let cont = delay()
-      discard submitTimeout(earlier(until, afterMs(10)), grouped(cont))
+      discard submitTimeout(earlier(until, afterMs(slice)), grouped(cont))
       suspend()
+      slice = min(slice * 2, SliceMaxMs)
 
 template beYield*() =
   ## On a worker the continuation is staged on the private ring, flushed only
@@ -278,10 +285,12 @@ proc bePrepareNode*(n: ptr WaitNode): bool =
   result = leaseWake(n.efd, n.efdW)
 
 proc observeNode(n: ptr WaitNode; deadline: Deadline) {.passive.} =
+  var slice = SliceMs
   while atomicLoad(n.state, moAcquire) == nsParked:
     let wake = delay()
-    discard submitPollAdd(n.efd, earlier(deadline, afterMs(10)), {evRead}, grouped(wake), addr n.ringRes)
+    discard submitPollAdd(n.efd, earlier(deadline, afterMs(slice)), {evRead}, grouped(wake), addr n.ringRes)
     suspend()
+    slice = min(slice * 2, SliceMaxMs)
     if beStopping():
       if tryClaim(n, wrClosed): atomicStore(n.state, nsFired, moRelease)
     elif deadline <= monoNow():
