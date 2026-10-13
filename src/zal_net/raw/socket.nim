@@ -115,11 +115,8 @@ proc tuneAccepted*(fd: cint; noDelay: bool) {.inline.} =
     discard fd
     discard noDelay
 
-# Listening sockets are shut down on SIGTERM/SIGINT before the process dies.
-# With io_uring the kernel tears a ring down asynchronously after exit, and a
-# poll still armed on a listener keeps the socket completing handshakes for
-# a few milliseconds: clients were accepted and then reset, and a restarted
-# server could not bind. shutdown(2) takes the socket out of LISTEN at once.
+# Listeners are shut down on SIGTERM/SIGINT: io_uring tears a ring down after
+# exit, and an armed poll would keep completing handshakes meanwhile.
 var gStopInstalled: int
 
 proc closeListeners() =

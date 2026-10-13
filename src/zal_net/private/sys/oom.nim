@@ -1,16 +1,11 @@
-## What a failed allocation does.
+## What a failed allocation does. Nimony's own allocator aborts with SIGABRT
+## and no message. Under `-d:useLibc` or `-d:useMimalloc` a failed `seq` or
+## `string` growth calls the OOM handler, whose default goes on with the
+## missing bytes and fails later elsewhere.
 ##
-## - With Nimony's own allocator (the default), the OS refusing pages aborts
-##   the process (SIGABRT, status 134, no message); no handler runs.
-## - With `-d:useLibc` or `-d:useMimalloc`, a `seq` or `string` that cannot
-##   grow calls Nimony's OOM handler, whose default notes the missing bytes
-##   and goes on: the program keeps running with, say, an empty seq where
-##   it asked for a large one, and fails later somewhere else.
-##
-## `initRuntime` installs `exitOnOutOfMemory` instead: it writes the size
-## that failed to stderr, allocating nothing, and exits with status 1. A
-## program that prefers to go on calls `setOomHandler(continueAfterOutOfMem)`
-## after `initRuntime`.
+## `initRuntime` installs `exitOnOutOfMemory`: it writes the failed size to
+## stderr without allocating and exits with status 1. To go on instead, call
+## `setOomHandler(continueAfterOutOfMem)` after `initRuntime`.
 
 import zal_net/private/sys/sock
 

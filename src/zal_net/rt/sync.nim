@@ -36,10 +36,9 @@ type
     permits: int
 
 proc notifyOne*(n: ptr Notify; coalesce = false) {.sync.} =
+  ## Wake the longest waiter, or store a permit for the next `wait`.
+  ## `coalesce` keeps at most one stored permit, for conditions callers recheck.
   {.cast(assumeSync).}:
-    ## Wake the longest waiter, or store a permit for the next `wait`.
-    ## Coalescing retains at most one new permit when no waiter exists. Use it
-    ## for a condition that callers recheck, rather than counting every signal.
     acquire(n.lock)
     let w = claimFirst(n.q, wrReady)
     if w == nil:

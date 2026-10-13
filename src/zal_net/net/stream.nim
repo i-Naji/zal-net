@@ -1,3 +1,8 @@
+  ## Both directions between `a` and `b` at once (the second in its own
+  ## task) until both end. An end of stream is forwarded as a half-close; an
+  ## error ends both. Idle means neither direction moved for `idleMs` (0: no
+  ## limit). The caller still owns and closes both streams. Cancel with a
+  ## token or `interrupt` on either stream; both pumps are drained first.
 import zal_net/reader
 export reader
 import zal_net/streamconcepts
@@ -5,14 +10,10 @@ export streamconcepts
 import zal_net/errors
 export StreamEof, TooLong
 ## Byte streams in general: the `ByteStream` and `DuplexStream` concepts
-## (TcpStream and UnixStream satisfy both; a TLS or WebSocket stream built
-## on them can too), `copy` and `relay` between any two, and `BufReader`
-## for protocols that read lines, delimited heads or exact lengths.
-##
-## A generic proc over these concepts is instantiated per stream type:
-## calls go straight to the type's procs, with no vtable. Between two
-## sockets on Linux, `copy` and `relay` move data with splice(2) through
-## a pipe instead of through user space.
+## (TcpStream and UnixStream satisfy both), `copy` and `relay` between any
+## two, and `BufReader` for lines, delimited heads or exact lengths. Generic
+## procs are instantiated per stream type, with no vtable; between two
+## sockets on Linux, `copy` and `relay` splice(2) through a pipe.
 ##
 ## ```nim
 ## # A TCP forwarder: whatever connects to :8080 is relayed to :80.

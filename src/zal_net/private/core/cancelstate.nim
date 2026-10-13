@@ -1,13 +1,10 @@
 import zal_net/private/runtime
-## Cancel tokens. Cancelling one wakes, with `wrCancelled`, every wait hooked
-## to it (Notify, Event, Chan, Oneshot, join, cancellable sleep), shuts down
-## every socket adopted by it — which wakes any park on that socket, on
-## the standard runtime — and cancels its children. `cancel` may be called from any
-## thread, including one that is not a loop, and is idempotent.
+## Cancel tokens. Cancelling one wakes every wait hooked to it with
+## `wrCancelled`, shuts down every socket adopted by it, and cancels its
+## children. `cancel` is idempotent and callable from any thread.
 ##
-## Nimony has no unwinding: cancellation reaches token-aware waits and
-## adopted sockets. A task that parks elsewhere notices it at its next
-## token-aware wait, or by checking `cancelled`.
+## Nimony has no unwinding: a task that parks elsewhere notices the
+## cancellation at its next token-aware wait, or by checking `cancelled`.
 
 import std/atomics
 import std/ticketlocks

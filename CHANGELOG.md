@@ -11,3 +11,5 @@
 - Use Nimony `d5396682` for closure layout and readiness retry fixes.
 - Resume passive calls in bounded batches on the standard pool.
 - Drain queued resumptions before pool shutdown.
+- Use Nimony `2593bf85` for symbol lookup and raises fixes.
+- Return an error from relay when its state cannot be allocated.
