@@ -30,6 +30,7 @@ Set `ZAL_WORKERS` before startup to configure the standard pool.
 The default comes from its CPU count/affinity; `runtimeWorkers()` reports it.
 I/O uses nonblocking native calls and public standard readiness/timer operations.
 Cancellation returns after the pending standard operation releases its storage.
+A token cancels an idle parked wait within about 200 ms; closing the owner is immediate.
 
 Linux offloads and raw-network/TUN tests need native capabilities and permissions.
 Platform errors and unavailable checks are kept explicit.

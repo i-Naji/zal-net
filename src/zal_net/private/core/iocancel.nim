@@ -8,6 +8,7 @@ import zal_net/raw/io
 import zal_net/private/runtime
 
 const CancelPollMs* = 10
+const CancelPollMaxMs* = 200   ## an idle park backs off from CancelPollMs to this
 
 type IoCancellation* = object
   ## Borrowed operation and owner-stop tokens. The I/O frame retains them;
@@ -31,59 +32,65 @@ proc release*(tokens: IoCancellation) {.inline.} =
 proc cancelled*(tokens: IoCancellation): bool {.inline.} =
   cancelled(tokens.operation) or cancelled(tokens.ownerStop) or cancelled(tokens.peerStop)
 
-proc pollDeadline*(deadline: Deadline; tokens: IoCancellation): Deadline {.inline.} =
+proc pollDeadline*(deadline: Deadline; tokens: IoCancellation; ms = CancelPollMs): Deadline {.inline.} =
   if tokens.operation == nil and tokens.ownerStop == nil and tokens.peerStop == nil: deadline
-  else: earlier(deadline, afterMs(CancelPollMs))
+  else: earlier(deadline, afterMs(ms))
 
 template parkCancellable*(fd: cint; events: IoEvents; deadline: Deadline;
                           tokens: IoCancellation; outcome: var int) =
   block:
+    var slice = CancelPollMs
     while true:
       if cancelled(tokens):
         outcome = ECancelled
         break
-      parkPoll(fd, events, pollDeadline(deadline, tokens), outcome)
+      parkPoll(fd, events, pollDeadline(deadline, tokens, slice), outcome)
       if cancelled(tokens):
         outcome = ECancelled
         break
       if (tokens.operation != nil or tokens.ownerStop != nil or tokens.peerStop != nil) and
           outcome == IoTimedOut and monoNow() < deadline:
+        slice = min(slice * 2, CancelPollMaxMs)
         continue
       break
 
-proc pollDeadline*(deadline: Deadline; tok: nil CancelToken): Deadline {.inline.} =
-  if tok == nil: deadline else: earlier(deadline, afterMs(CancelPollMs))
+proc pollDeadline*(deadline: Deadline; tok: nil CancelToken; ms = CancelPollMs): Deadline {.inline.} =
+  if tok == nil: deadline else: earlier(deadline, afterMs(ms))
 
 template parkCancellable*(fd: cint; events: IoEvents; deadline: Deadline;
                           tok: nil CancelToken; outcome: var int) =
   ## Caller retains tok across the complete operation, including each park.
   block:
+    var slice = CancelPollMs
     while true:
       if cancelled(tok):
         outcome = ECancelled
         break
-      parkPoll(fd, events, pollDeadline(deadline, tok), outcome)
+      parkPoll(fd, events, pollDeadline(deadline, tok, slice), outcome)
       if cancelled(tok):
         outcome = ECancelled
         break
       if tok != nil and outcome == IoTimedOut and monoNow() < deadline:
+        slice = min(slice * 2, CancelPollMaxMs)
         continue
       break
 
 template parkAcceptCancellable*(fd: cint; deadline: Deadline;
                                 tok: nil CancelToken; outcome: var int) =
   block:
+    var slice = CancelPollMs
     while true:
       if cancelled(tok):
         outcome = ECancelled
         break
       # Keep the listener's poller classification. Raw owners permit one
       # pending accept per loop, as with the ordinary parkAccept path.
-      beParkFd(fd, false, true, pollDeadline(deadline, tok), outcome)
+      beParkFd(fd, false, true, pollDeadline(deadline, tok, slice), outcome)
       if cancelled(tok):
         outcome = ECancelled
         break
       if tok != nil and outcome == IoTimedOut and monoNow() < deadline:
+        slice = min(slice * 2, CancelPollMaxMs)
         continue
       break
 
