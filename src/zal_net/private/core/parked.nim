@@ -10,18 +10,22 @@ const ParkedLimit = 1 shl 21
 var gParked: nil ptr UncheckedArray[int]
 var gParkedCap: int
 
+proc newFdTable*(cap: var int): nil ptr UncheckedArray[int] =
+  ## One zeroed slot per descriptor; pages are backed only when used.
+  result = nil
+  var soft = 0
+  var hard = 0
+  if not fdLimits(soft, hard): soft = 0
+  let size = min(max(soft, 1 shl 16), ParkedLimit)
+  let table = zeroedShared(size * sizeof(int))
+  if table != nil:
+    result = cast[ptr UncheckedArray[int]](table)
+    cap = size
+
 proc initParked*() {.sync.} =
-  ## Once, before any park. The table's pages are backed only when used.
+  ## Once, before any park.
   {.cast(assumeSync).}:
-    if gParked != nil: return
-    var soft = 0
-    var hard = 0
-    if not fdLimits(soft, hard): soft = 0
-    let cap = min(max(soft, 1 shl 16), ParkedLimit)
-    let table = zeroedShared(cap * sizeof(int))
-    if table == nil: return
-    gParked = cast[ptr UncheckedArray[int]](table)
-    gParkedCap = cap
+    if gParked == nil: gParked = newFdTable(gParkedCap)
 
 proc enterParked*(fd: cint): bool {.sync.} =
   ## False for a descriptor the table cannot hold: such a park keeps slicing.
