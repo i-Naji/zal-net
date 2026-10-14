@@ -28,7 +28,7 @@ template fdRecvInline*(fd: cint; timeoutMs: int; p: pointer; n: int;
     let peerToken: nil CancelToken = peerCancel
     retain(ownerToken)
     retain(peerToken)
-    let cancellationSources = ioCancellation(operationToken, ownerToken, peerToken)
+    let cancellationSources = ioCancellation(operationToken, ownerToken, peerToken, interrupts = true)
     if operationToken != nil: retain(operationToken)
     let count = n
     outcome = InvalidInput
@@ -66,7 +66,7 @@ template fdSendInline*(fd: cint; timeoutMs: int; p: pointer; n: int;
     let peerToken: nil CancelToken = peerCancel
     retain(ownerToken)
     retain(peerToken)
-    let cancellationSources = ioCancellation(operationToken, ownerToken, peerToken)
+    let cancellationSources = ioCancellation(operationToken, ownerToken, peerToken, interrupts = true)
     if operationToken != nil: retain(operationToken)
     let count = n
     outcome = InvalidInput

@@ -31,7 +31,8 @@ The default comes from its CPU count/affinity; `runtimeWorkers()` reports it.
 A single worker delays datagram-engine readiness under heavy association churn; use two or more.
 I/O uses nonblocking native calls and public standard readiness/timer operations.
 Cancellation returns after the pending standard operation releases its storage.
-A token cancels an idle parked wait within about 200 ms; closing the owner is immediate.
+A token, or closing a UDP socket, cancels an idle parked wait within about 200 ms;
+closing a stream is immediate.
 
 Linux offloads and raw-network/TUN tests need native capabilities and permissions.
 Platform errors and unavailable checks are kept explicit.

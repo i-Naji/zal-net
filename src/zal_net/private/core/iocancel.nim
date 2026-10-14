@@ -15,10 +15,12 @@ type IoCancellation* = object
   ## Borrowed operation and owner-stop tokens. The I/O frame retains them;
   ## no child token or other storage is allocated for an operation.
   operation*, ownerStop*, peerStop*: nil CancelToken
+  interrupts*: bool  ## closing the owner interrupts the socket (streams, not UDP)
 
 proc ioCancellation*(operation: nil CancelToken;
-                     ownerStop: nil CancelToken = nil; peerStop: nil CancelToken = nil): IoCancellation {.inline.} =
-  IoCancellation(operation: operation, ownerStop: ownerStop, peerStop: peerStop)
+                     ownerStop: nil CancelToken = nil; peerStop: nil CancelToken = nil;
+                     interrupts = false): IoCancellation {.inline.} =
+  IoCancellation(operation: operation, ownerStop: ownerStop, peerStop: peerStop, interrupts: interrupts)
 
 proc retain*(tokens: IoCancellation) {.inline.} =
   retain(tokens.operation)
@@ -42,7 +44,7 @@ template parkCancellable*(fd: cint; events: IoEvents; deadline: Deadline;
   block:
     var slice = CancelPollMs
     # Only the owner's stop token: close and runtime stop interrupt the socket.
-    let owned = tokens.operation == nil and tokens.peerStop == nil and
+    let owned = tokens.interrupts and tokens.operation == nil and tokens.peerStop == nil and
       tokens.ownerStop != nil and enterParked(fd)
     while true:
       if cancelled(tokens) or (owned and stopping()):
