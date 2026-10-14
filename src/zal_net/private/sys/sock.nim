@@ -105,6 +105,8 @@ else:
     when defined(linux):
       var sa = default(array[16, byte])          # sa_family 0: AF_UNSPEC
       result = sockConnect(fd, addr sa[0], cuint(sa.len)) == 0
+      # The reset alone polls as error and hang-up, which epoll readers miss.
+      if result: discard sockShutdown(fd, 2)
     elif defined(macosx):
       result = cDisconnectx(fd, 0'u32, 0'u32) == 0   # SAE_ASSOCID_ANY, SAE_CONNID_ANY
     else:
