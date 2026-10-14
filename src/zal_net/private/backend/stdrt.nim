@@ -9,6 +9,8 @@ import std/ticketlocks
 import std/stripes
 from std/rawthreads import getThreadId
 from zal_net/private/sys/sock import sleepUs
+from zal_net/private/sys/posix import fdLimits
+from zal_net/private/sys/env import tasksFromEnv, MaxTasks
 import std/threadpool
 import std/ioring
 import zal_net/rt/time
@@ -27,6 +29,8 @@ proc closeFdRaw*(fd: cint) =
   ioring.closeFdRaw(fd)
 
 const ExternalCapacity = 8192
+# Admitted tasks; ZAL_TASKS, else the descriptor limit. Most tasks hold a socket.
+var gTaskLimit = ExternalCapacity
 var external: FifoStripe[Continuation]
 external.init(ExternalCapacity)
 let entryThread = getThreadId()
@@ -95,7 +99,7 @@ proc beStopping*(): bool {.inline.} = atomicLoad(gStopReq, moSequentiallyConsist
 
 proc admitTask(): bool =
   gAdmission.acquire()
-  result = not beStopping() and atomicLoad(gActive, moAcquire) < ExternalCapacity
+  result = not beStopping() and atomicLoad(gActive, moAcquire) < atomicLoad(gTaskLimit, moRelaxed)
   if result: discard atomicFetchAdd(gActive, 1, moAcquireRelease)
   gAdmission.release()
 
@@ -124,6 +128,13 @@ proc tracked(c: Continuation): Continuation =
 proc beInit*() =
   initIoRing()
   initParked()
+  var limit = tasksFromEnv("ZAL_TASKS")
+  if limit == 0:
+    var soft = 0
+    var hard = 0
+    if fdLimits(soft, hard): limit = min(max(soft, ExternalCapacity), MaxTasks)
+    else: limit = ExternalCapacity
+  atomicStore(gTaskLimit, limit, moRelaxed)
 
 proc beStop*() =
   ## Signal-safe request. The process runner performs joining after tasks drain.

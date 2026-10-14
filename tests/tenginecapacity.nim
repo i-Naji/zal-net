@@ -1,5 +1,5 @@
 ## Registration capacity rejects before consuming a native descriptor.
-import std/[assertions, syncio]
+import std/[assertions, syncio, envvars]
 import std/atomics
 import zal_net/rt
 import zal_net/raw/io
@@ -14,7 +14,7 @@ proc child() {.passive.} =
 proc main() {.passive.} =
   var admitted = 0
   while trySpawnTask(child()): inc admitted
-  assert admitted > 0 and admitted <= 8192, "task admission must remain bounded"
+  assert admitted > 0 and admitted <= 1024, "task admission must remain bounded"
   let ready = newReadiness()
   var pair = [-1.cint, -1.cint]
   assert sockPair(addr pair[0]) == 0, "socketpair creation"
@@ -45,4 +45,6 @@ proc main() {.passive.} =
   requestStop()
   echo "PASS registration capacity rejection, descriptor preservation and recovery"
 
+try: putEnv("ZAL_TASKS", "1024")
+except: quit "putEnv"
 assert runMain(main())

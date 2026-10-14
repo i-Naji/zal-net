@@ -17,3 +17,4 @@
 - Build without -d:useMimalloc; the native allocator is supported.
 - Back off cancellation and readiness polling for idle connections.
 - Park owned sockets on their real deadline: idle connections no longer poll.
+- Admit tasks up to ZAL_TASKS or the descriptor limit instead of 8192.

@@ -28,6 +28,7 @@ before shutting down the standard pool.
 The runtime cannot restart. Library close never shuts down the pool.
 Set `ZAL_WORKERS` before startup to configure the standard pool.
 The default comes from its CPU count/affinity; `runtimeWorkers()` reports it.
+`ZAL_TASKS` caps admitted tasks (default: the descriptor limit, at least 8192).
 A single worker delays datagram-engine readiness under heavy association churn; use two or more.
 I/O uses nonblocking native calls and public standard readiness/timer operations.
 Cancellation returns after the pending standard operation releases its storage.
