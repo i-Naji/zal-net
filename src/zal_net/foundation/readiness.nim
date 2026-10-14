@@ -49,7 +49,7 @@ proc observe(readiness: sink Readiness; registration: sink Registration) {.passi
     # At most one queued event per registration. Do not resubmit a level-ready
     # socket until its consumer has drained a batch and acknowledged the event.
     while active(registration) and not isSet(addr registration.rearm) and not stopping():
-      discard wait(addr registration.rearm, afterMs(10))
+      discard wait(addr registration.rearm, never)
   setEvent(addr registration.done)
 
 proc watch*(readiness: Readiness; fd: cint; tag: uint64): bool =
