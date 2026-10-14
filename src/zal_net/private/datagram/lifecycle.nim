@@ -84,6 +84,7 @@ template engineBody(e: ptr DatagramEngine) =
     runEngine(e, inB, legB)
   shutdownEngine(e)
   let pending = retireAll(readiness(e))
+  wakeJobInbox(e.inbox[])
   for registration in pending: join(registration)
   drainRetired(e)
   discardReady(readiness(e))

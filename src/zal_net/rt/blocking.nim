@@ -277,6 +277,11 @@ proc inboxFd*(b: JobInbox): cint =
   if state == nil: return -1
   result = state.wakeRd
 
+proc wakeJobInbox*(b: JobInbox) =
+  ## Consumer only: make `inboxFd` readable once without posting.
+  let state = b.state
+  if state != nil: wakeSignal(state.wakeWr)
+
 proc closeJobInbox*(b: var JobInbox) =
   ## Consumer only, after it stopped polling. Idempotent. Pending producers may
   ## finish later; they never touch this wrapper or the former consumer.

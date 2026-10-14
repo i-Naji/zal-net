@@ -96,9 +96,27 @@ proc readiness(e: ptr DatagramEngine): Readiness =
 
 proc watchEngine(e: ptr DatagramEngine; fd: cint; tag: uint64): bool =
   result = watch(readiness(e), fd, tag)
+proc interruptRetired(fd: cint) =
+  ## Wake the retired waiter still polling `fd`. A datagram socket is
+  ## connected first: macOS ignores a shutdown of an unconnected one.
+  var local = default(SockAddrBuf)
+  local.len = cuint(sizeof(SockaddrStorage))
+  if sockGetsockname(fd, addr local.ss, addr local.len) == 0:
+    let family = cint(local.ss.ss_family)
+    var peer = default(SockAddrBuf)
+    var lo = default(array[16, byte])
+    lo[15] = 1
+    let ok = if family == AF_INET: setIpAddr(peer, [127'u8, 0, 0, 1], 9, family)
+             elif family == AF_INET6: setIpAddr(peer, lo, 9, family)
+             else: false
+    if ok: discard sockConnect(fd, addr peer.ss, peer.len)
+  discard sockShutdown(fd, 2)
+
 proc closeEngineFd(e: ptr DatagramEngine; fd: cint) =
   let registration = retire(readiness(e), fd)
-  if registration != nil: e.retired.add registration
+  if registration != nil:
+    interruptRetired(fd)
+    e.retired.add registration
   else: discard closeRaw(fd)
 proc drainRetired(e: ptr DatagramEngine) {.passive.} =
   for registration in e.retired:
