@@ -19,3 +19,4 @@
 - Park owned sockets on their real deadline: idle connections no longer poll.
 - Admit tasks up to ZAL_TASKS or the descriptor limit instead of 8192.
 - Park Event, Notify and channel waits on their real deadline; stop wakes them at once.
+- Back off idle datagram-engine polls to a second; retired sockets are woken at once.

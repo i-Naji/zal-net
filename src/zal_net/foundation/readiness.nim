@@ -1,6 +1,8 @@
 ## Retained readiness registrations for a serialized consumer.
 ## Each registration owns one passive waiter. Retirement stops rearming; the
 ## descriptor owner must join it before closing or reusing the native handle.
+## An idle waiter polls about once a second: an owner that wakes the
+## descriptor (a shutdown) ends it sooner.
 import std/[atomics, ticketlocks, tables]
 import zal_net/rt
 import zal_net/rt/sync
@@ -38,12 +40,18 @@ proc publish(readiness: Readiness; registration: Registration) =
   setEvent(addr readiness.available)
   readiness.lock.release()
 
+const ObserveMaxMs = 1000
+
 proc observe(readiness: sink Readiness; registration: sink Registration) {.passive.} =
+  var slice = 10
   while active(registration) and not stopping():
     var outcome = 0
-    parkPoll(registration.descriptor, {evRead}, afterMs(10), outcome)
+    parkPollOwned(registration.descriptor, {evRead}, afterMs(slice), outcome)
     if not active(registration) or stopping(): break
-    if outcome == IoTimedOut: continue
+    if outcome == IoTimedOut:
+      slice = min(slice * 2, ObserveMaxMs)
+      continue
+    slice = 10
     clearEvent(addr registration.rearm)
     publish(readiness, registration)
     # At most one queued event per registration. Do not resubmit a level-ready
