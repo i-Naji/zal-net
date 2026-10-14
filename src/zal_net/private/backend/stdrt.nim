@@ -128,6 +128,7 @@ proc tracked(c: Continuation): Continuation =
 proc beInit*() =
   initIoRing()
   initParked()
+  initWakes()
   var limit = tasksFromEnv("ZAL_TASKS")
   if limit == 0:
     var soft = 0
@@ -150,6 +151,7 @@ proc beRun*() =
     if not swept and beStopping():
       swept = true
       interruptParked()
+      wakeLeased()
     gAdmission.acquire()
     let drained = beStopping() and atomicLoad(gActive, moAcquire) == 0 and
       atomicLoad(gResuming, moAcquire) == 0
