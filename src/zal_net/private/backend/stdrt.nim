@@ -304,22 +304,26 @@ proc bePrepareNode*(n: ptr WaitNode): bool =
   n.ringRes = 0
   result = leaseWake(n.efd, n.efdW)
 
-proc observeNode(n: ptr WaitNode; deadline: Deadline) {.passive.} =
+proc observeNode(n: ptr WaitNode; deadline: Deadline; sliced: bool) {.passive.} =
+  # Stop is checked before each poll: the lease was recorded first, so
+  # either this sees it or the runner's stop signal reaches the poll.
   var slice = SliceMs
   while atomicLoad(n.state, moAcquire) == nsParked:
-    let wake = delay()
-    discard submitPollAdd(n.efd, earlier(deadline, afterMs(slice)), {evRead}, grouped(wake), addr n.ringRes)
-    suspend()
-    slice = min(slice * 2, SliceMaxMs)
     if beStopping():
       if tryClaim(n, wrClosed): atomicStore(n.state, nsFired, moRelease)
     elif deadline <= monoNow():
       if tryClaim(n, wrTimedOut): atomicStore(n.state, nsFired, moRelease)
+    else:
+      let wake = delay()
+      let until = if sliced: earlier(deadline, afterMs(slice)) else: deadline
+      discard submitPollAdd(n.efd, until, {evRead}, grouped(wake), addr n.ringRes)
+      suspend()
+      slice = min(slice * 2, SliceMaxMs)
   # A remote winner may still be publishing its result and wake byte.
   while atomicLoad(n.state, moAcquire) != nsFired: cpuRelax()
 
 proc beArmNode*(n: ptr WaitNode; deadline: Deadline) =
-  let watcher = delay(observeNode(n, deadline))
+  let watcher = delay(observeNode(n, deadline, not wakeTracked(n.efd)))
   watcher.env[].caller = n.cont
   stageResume(watcher)
 
