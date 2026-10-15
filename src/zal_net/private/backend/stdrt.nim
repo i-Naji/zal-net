@@ -8,7 +8,7 @@ import std/atomics
 import std/ticketlocks
 import std/stripes
 from std/rawthreads import getThreadId
-from zal_net/private/sys/sock import sleepUs
+from zal_net/private/sys/sock import sleepUs, PollFd, PollIn, PollOut, sockPoll
 from zal_net/private/sys/posix import fdLimits
 from zal_net/private/sys/env import tasksFromEnv, MaxTasks
 import std/threadpool
@@ -52,6 +52,7 @@ proc prepareRoot(root: var CoroutineBase; completion: Continuation) {.sync.} =
 const ResumeSteps = 128
 const SliceMs = 10
 const SliceMaxMs = 200
+const HangMaxMs = 50
 # A wrapper may still have completion work after its child releases admission.
 var gResuming: int
 var resumeAnchor = default(CoroutineBase)
@@ -197,6 +198,11 @@ proc runtimeWorkers*(): int = workerCount
 
 proc onLoop*(): bool {.inline.} = isPoolWorker()
 
+proc pollSees(fd: cint; write: bool): bool =
+  var p = PollFd(fd: fd, events: PollIn)
+  if write: p.events = PollOut
+  result = sockPoll(addr p, 1, 0) != 0
+
 template beParkFd*(fd: cint; write, listener: bool; deadline: Deadline; res: var int; sliced = true) =
   block:
     res = -1
@@ -204,6 +210,7 @@ template beParkFd*(fd: cint; write, listener: bool; deadline: Deadline; res: var
     if write: dir = {evWrite}
     let until = deadline
     var slice = SliceMs
+    var hangMs = 1
     while true:
       let cont = delay()
       let step = if not sliced or until <= afterMs(SliceMaxMs): until else: earlier(until, afterMs(slice))
@@ -217,18 +224,23 @@ template beParkFd*(fd: cint; write, listener: bool; deadline: Deadline; res: var
         # callers with relative idle timeouts cannot restart it every slice.
         slice = min(slice * 2, SliceMaxMs)
         continue
+      if res == 0:
+        # io_uring reports the hang-up bits too (a peer's half-close fires a
+        # write poll), and std/ioring maps a poll fired only for those to 0.
+        # Report what poll(2) sees something on; a socket merely full behind
+        # a half-closed peer waits on, backing off.
+        if pollSees(fd, write):
+          res = toEventMask(dir)
+          break
+        let pause = delay()
+        discard submitTimeout(earlier(until, afterMs(hangMs)), grouped(pause))
+        suspend()
+        if monoNow() >= until:
+          res = time.IoTimedOut
+          break
+        hangMs = min(hangMs * 2, HangMaxMs)
+        continue
       break
-    if res == 0:
-      # io_uring always reports the hang-up bits: after the peer's
-      # half-close (EPOLLRDHUP) a write poll fires at once, and std/ioring
-      # maps a poll that fired only for those bits to 0. Wait a moment and
-      # report the direction ready: the caller's next system call tells a
-      # writable socket from a broken one, and the pause keeps a socket
-      # with a full buffer from spinning while EPOLLRDHUP stays set.
-      let pause = delay()
-      discard submitTimeout(afterMs(1), grouped(pause))
-      suspend()
-      res = toEventMask(dir)
 
 template beParkUntil*(deadline: Deadline) =
   block:

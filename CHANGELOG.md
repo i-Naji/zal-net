@@ -22,3 +22,4 @@
 - Back off idle datagram-engine polls to a second; retired sockets are woken at once.
 - Wake relay pumps at once when the other side fails on the Linux epoll backend.
 - Notice a rejected kTLS record while a relay reader is parked on the epoll backend.
+- Back off a writer stalled behind a half-closed peer on io_uring instead of retrying every millisecond.
