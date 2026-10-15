@@ -1,11 +1,12 @@
 ## nimony c --path:src examples/application_echo.nim
 import std/syncio
 import zal_net
+import zal_net/log
 
 type Context = ref object
   connections: int
 
-proc report(ctx: Context; error: ErrorCode) = echo "connection: ", error
+proc report(ctx: Context; error: ErrorCode) = logWarn("connection: " & $error)
 
 proc echoClient(stream: TcpStream; ctx: Context) {.passive, raises.} =
   inc ctx.connections
@@ -18,6 +19,7 @@ proc echoClient(stream: TcpStream; ctx: Context) {.passive, raises.} =
 
 proc main(ctx: sink Context) {.passive.} =
   try:
+    discard initLogger()
     let server = listen(7007)
     defer: server.close()
     echo "echo on :7007"

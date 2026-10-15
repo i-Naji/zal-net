@@ -25,6 +25,7 @@ Low-level I/O reports bytes and failure separately. Do not replay partial writes
 
 The process runner drains tasks and joins blocking/logging/signal services
 before shutting down the standard pool.
+`echo` is not synchronized between workers; handlers log through `zal_net/log`.
 The runtime cannot restart. Library close never shuts down the pool.
 Set `ZAL_WORKERS` before startup to configure the standard pool.
 The default comes from its CPU count/affinity; `runtimeWorkers()` reports it.
