@@ -16,16 +16,6 @@ proc readRoom(d: DirectionPtr): int =
     d.fill = HeadRoom + n
   result = BufCap - d.fill
 
-proc peekInput(fd: cint): int =
-  ## Non-consuming readiness probe, used only while payload storage is absent.
-  var value = 0'u8
-  while true:
-    let n = sockRecv(fd, addr value, 1, MsgPeek)
-    if n >= 0: return n
-    let err = lastErr()
-    if err == EIntr: continue
-    return (if err == EAgain: IoAgain else: -err)
-
 proc ingestFramed(c: Conn; d: DirectionPtr; f: Framer): int {.noinline.} =
   ## Decode what is buffered (`f` is d.srcFramer); read more until a batch
   ## is ready.

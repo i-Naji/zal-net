@@ -21,3 +21,4 @@
 - Park Event, Notify and channel waits on their real deadline; stop wakes them at once.
 - Back off idle datagram-engine polls to a second; retired sockets are woken at once.
 - Wake relay pumps at once when the other side fails on the Linux epoll backend.
+- Notice a rejected kTLS record while a relay reader is parked on the epoll backend.

@@ -301,6 +301,17 @@ proc closeConn*(c: Conn) =
   freeConn(c)
 
 const FailPollMs = 200   ## Windows, std backend: how often a parked pump looks for a failure
+const ErrorProbeMs = 10  ## Linux epoll: first look for a socket error, doubling to a second
+
+proc peekInput(fd: cint): int =
+  ## Non-consuming readiness probe: bytes, IoAgain or the socket's error.
+  var value = 0'u8
+  while true:
+    let n = sockRecv(fd, addr value, 1, MsgPeek)
+    if n >= 0: return n
+    let err = lastErr()
+    if err == EIntr: continue
+    return (if err == EAgain: IoAgain else: -err)
 
 template relayPark(c: Conn; fd: cint; events: IoEvents; res: var int) =
   ## A pump's park (`parkReady` on the connection's idle stamp). On Windows
@@ -325,6 +336,8 @@ template relayReadPark(c: Conn; d: DirectionPtr; res: var int) =
   ## Idle payload reclamation has its own deadline. It neither consumes input
   ## nor ends the connection. Descriptor readiness holds no buffer address.
   block:
+    when defined(linux) and defined(nimIoringNoUring):
+      var probeMs = ErrorProbeMs
     while true:
       let now = monoNow()
       let connectionDeadline = ioDeadline(addr c.lastIo, c.timeoutMs)
@@ -339,12 +352,22 @@ template relayReadPark(c: Conn; d: DirectionPtr; res: var int) =
       var deadline = earlier(connectionDeadline, payloadDeadline)
       when defined(windows):
         deadline = earlier(deadline, afterMs(FailPollMs))
+      when defined(linux) and defined(nimIoringNoUring):
+        deadline = earlier(deadline, afterMs(probeMs))
       parkPoll(d.src, {evRead}, deadline, res)
       if res > 0: break
       if res == IoTimedOut:
         if atomicLoad(c.failed, moAcquire):
           res = ECancelled
           break
+        when defined(linux) and defined(nimIoringNoUring):
+          # epoll never delivers an error-only event (a kTLS record the kernel
+          # rejected): look for one.
+          let probed = peekInput(d.src)
+          if probed != IoAgain:
+            res = if probed < 0: probed else: 1
+            break
+          probeMs = min(probeMs * 2, 1000)
         # Either deadline may have moved while the other pump made progress.
         if monoNow() >= ioDeadline(addr c.lastIo, c.timeoutMs): break
       elif not transientIo(res): break
