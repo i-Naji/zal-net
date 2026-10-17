@@ -118,11 +118,11 @@ proc readLine*[S: ByteStream](r: ptr BufReader[S]; line: ptr string; maxLen = 81
     n = n - 1
     if n > 0 and r.buf[r.head + n - 1] == byte('\r'): n = n - 1
   if n > maxLen: return TooLong
-  line[].setLen(n)
-  var i = 0
-  while i < n:
-    line[][i] = char(r.buf[r.head + i])
-    i = i + 1
+  if n > 0:
+    copyMem(beginStore(line[], n), addr r.buf[r.head], n)
+    endStore(line[])
+  else:
+    line[].setLen(0)
   consume(r, take)
   result = n
 
