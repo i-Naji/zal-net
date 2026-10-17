@@ -15,11 +15,9 @@ proc dispatch[C](connection: sink TcpConnRef; context: sink C;
   handler(connection, context)
   discard close(connection)
 
-template serve*[C](listener: TcpListenerRef; handler: ContextHandler[C]; ctx: C;
+template serve*[C: ref](listener: TcpListenerRef; handler: ContextHandler[C]; ctx: C;
                    streamTimeoutMs = DefaultTimeoutMs; noDelay = true): int =
   block:
-    when not (C is ref):
-      {.error: "serve context must be a ref object".}
     let held = listener
     let context = ctx
     let callback = handler

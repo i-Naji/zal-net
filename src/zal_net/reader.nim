@@ -34,7 +34,7 @@ proc consume*[S: ByteStream](r: ptr BufReader[S]; n: int) {.inline.} =
     r.tail = 0
 
 proc fill*[S: ByteStream](r: ptr BufReader[S]; deadline = never;
-                         tok: nil CancelToken = nil): int {.passive.} =
+                         tok: nil CancelToken = nil): int {.passive, untyped.} =
   ## One read from the stream after what is buffered: bytes added, 0 end
   ## of stream, <0 an error, TooLong when the buffer is full.
   when not (S is CancellableByteStream):
@@ -123,7 +123,7 @@ proc readLine*[S: ByteStream](r: ptr BufReader[S]; line: ptr string; maxLen = 81
   result = n
 
 proc recvInto*[S: ByteStream](r: ptr BufReader[S]; p: pointer; n: int; deadline = never;
-                             tok: nil CancelToken = nil): int {.passive.} =
+                             tok: nil CancelToken = nil): int {.passive, untyped.} =
   ## Buffered bytes first; a large read with nothing buffered goes to the
   ## stream directly.
   if n < 0: return InvalidInput
@@ -161,7 +161,7 @@ proc readExactly*[S: ByteStream](r: ptr BufReader[S]; p: pointer; n: int; deadli
   result = true
 
 proc sendFrom*[S: ByteStream](r: ptr BufReader[S]; p: pointer; n: int; deadline = never;
-                             tok: nil CancelToken = nil): int {.passive.} =
+                             tok: nil CancelToken = nil): int {.passive, untyped.} =
   ## Straight to the stream: a BufReader is a ByteStream too.
   if n < 0: return InvalidInput
   if n == 0: return 0

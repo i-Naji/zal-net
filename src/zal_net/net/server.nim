@@ -45,15 +45,13 @@ proc idleEvent(service: Serving): ptr Event {.inline.} = addr service.idle
 
 proc raiseFailure(error: ErrorCode) {.raises.} = raise error
 
-template serve*[C](listener: TcpListener; handler: Handler[C]; context: C;
+template serve*[C: ref](listener: TcpListener; handler: Handler[C]; context: C;
                    onError: ErrorHandler[C]) =
   ## The context must be a retained ref with synchronized mutable state. Handler errors are isolated and
   ## reported; an acceptance error is raised only after admitted handlers drain.
   ## A closed listener ends serving normally. Returning handlers relinquish
   ## their stream, including any retained aliases; it is closed by dispatch.
   block:
-    when not (C is ref):
-      {.error: "serve context must be a ref object".}
     let server = listener
     let held = context
     let service = newServing()

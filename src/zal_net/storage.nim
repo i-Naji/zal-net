@@ -5,7 +5,7 @@ type AlignmentProbe[T] = object
   prefix: byte
   value: T
 
-proc storageAs*[T, I](words: var array[I, uint64]; stateType: typedesc[T]): ptr T {.inline.} =
+proc storageAs*[T, I](words: var array[I, uint64]; stateType: typedesc[T]): ptr T {.inline, untyped.} =
   ## The returned pointer borrows words. T must be plain data with an all-zero
   ## empty state. Do not retain the pointer if the owner may move its storage.
   ## Nimony does not expose alignof: a leading byte plus a value makes the

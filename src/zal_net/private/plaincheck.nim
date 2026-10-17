@@ -89,6 +89,8 @@ proc transform(input, defs: NifCursor): NifBuilder =
   skip sequence
   var text = sequence
   skip text
+  var required = text
+  skip required
   if typ.typeKind == TypedescT: typ = firstChild(typ)
   if sequence.typeKind == TypedescT: sequence = firstChild(sequence)
   if text.typeKind == TypedescT: text = firstChild(text)
@@ -106,6 +108,8 @@ proc transform(input, defs: NifCursor): NifBuilder =
   let valid = checkType(typ, defs, missing, deferred, origins)
   if missing.len > 0: return needTypes(missing)
   if deferred: return deferExpansion()
+  if not valid and required.exprKind == TrueX:
+    return errorTree("cross-thread byte copies require plain data (no managed fields or closures)", input)
   result = createTree()
   if valid:
     result.withTree TrueX, NoLineInfo: discard

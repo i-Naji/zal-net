@@ -68,7 +68,7 @@ proc stillActive(act: ptr int64; idleMs: int): bool {.inline.} =
   idleMs > 0 and act != nil and monoNow() < ioDeadline(act, idleMs)
 
 proc plainCopy[A: ByteStream; B: ByteStream](src: A; dst: B; act: ptr int64; idleMs: int;
-                                           tokens: IoCancellation): CopyStats {.passive.} =
+                                           tokens: IoCancellation): CopyStats {.passive, untyped.} =
   result = CopyStats()
   var buf = default(array[CopyChunk, byte])
   var sinceYield = 0
@@ -200,7 +200,7 @@ when defined(linux):
 
 
 proc direction[A: ByteStream; B: ByteStream](src: A; dst: B; act: ptr int64; idleMs: int;
-                                             splice: bool; tokens: IoCancellation): CopyStats {.passive.} =
+                                             splice: bool; tokens: IoCancellation): CopyStats {.passive, untyped.} =
   # No early return here: a statement then `return` in a `when` branch of
   # a generic passive proc crashes nimsem.
   when defined(linux) and (A is TcpStreamPtr or A is UnixStreamPtr) and (B is TcpStreamPtr or B is UnixStreamPtr):

@@ -3,11 +3,7 @@
 ## ARC but loses the matching release. This restricted helper never changes the owner's count.
 ## Requires a proven non-nil Ref. The retained owner must outlive every
 ## context callback (trefcontext and ttlsref regressions).
-proc borrowRefContext*[T](owner: T): pointer {.inline.} =
-  when not (T is ref):
-    {.error: "opaque reference context requires a managed ref owner".}
-  when sizeof(T) != sizeof(pointer):
-    {.error: "reference context representation must be pointer-sized".}
+proc borrowRefContext*[T: ref](owner: T): pointer {.inline.} =
   # Initialize with a known non-nil cell address; copyMem then replaces those
   # bits with its non-nil reference value. This avoids a false nil-proof error.
   result = cast[pointer](unsafeAddr owner)

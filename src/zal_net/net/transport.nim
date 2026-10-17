@@ -38,12 +38,10 @@ proc `=destroy`(transport: var TransportObj) =
   # No passive callback or runtime operation is entered by a destructor.
   transport.owner = nil
 
-proc retainTransport*[T](owner: T; operations: StreamOps;
+proc retainTransport*[T: ref](owner: T; operations: StreamOps;
                          control: TransportControl): Transport =
   ## Callbacks receive the opaque reference representation: cast ctx to T,
   ## never ptr T or ptr typeof(owner[]). Each callback must preserve its owner.
-  when not (T is ref):
-    {.error: "retained transport requires a reference owner".}
   let keep = KeepAlive[T](value: owner)
   let context = borrowRefContext(owner)
   result = Transport(owner: RootRef(keep), context: context, operations: operations,

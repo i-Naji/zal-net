@@ -4,11 +4,10 @@
 ## not have ownership/copy/destruction hooks: this pin does not expose every
 ## hook to plugins, so that additional requirement remains a caller contract.
 template plainType[T](valueType: typedesc[T]; sequenceType: typedesc[seq[byte]];
-                      stringType: typedesc[string]): bool {.plugin: "private/plaincheck".}
+                      stringType: typedesc[string]; required: bool): bool {.plugin: "private/plaincheck".}
 
 template isPlainData*[T](valueType: typedesc[T]): bool =
-  plainType(T, seq[byte], string)
+  plainType(T, seq[byte], string, false)
 
 template requirePlainData*[T](valueType: typedesc[T]) =
-  when not isPlainData(T):
-    {.error: "cross-thread byte copies require plain data (no managed fields or closures)".}
+  discard plainType(T, seq[byte], string, true)
