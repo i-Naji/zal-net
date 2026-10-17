@@ -26,6 +26,10 @@ proc peek*[S: ByteStream](r: ptr BufReader[S]): ptr UncheckedArray[byte] {.inlin
   ## The buffered bytes (`buffered` of them); valid until the next read.
   cast[ptr UncheckedArray[byte]](addr r.buf[r.head])
 
+proc peek*[S: ByteStream](r: BufReader[S]): openArray[byte] {.inline, establishesBorrow.} =
+  ## Use the var overloads to keep mutations checked against this borrow.
+  r.buf.toOpenArray(r.head, r.tail - 1)
+
 proc consume*[S: ByteStream](r: ptr BufReader[S]; n: int) {.inline.} =
   if n <= 0: return
   r.head = r.head + min(n, r.tail - r.head)
@@ -188,3 +192,24 @@ template sendFrom*[S: ByteStream](r: ptr BufReader[S]; buf: openArray[byte];
 template readExactly*[S: ByteStream](r: ptr BufReader[S]; buf: var openArray[byte];
                                     deadline: Deadline = never; tok: nil CancelToken = nil): bool =
   readExactly(r, dataPtr(buf), buf.len, deadline, tok)
+
+proc consume*[S: ByteStream](r: var BufReader[S]; n: int) {.inline.} =
+  consume(addr r, n)
+
+proc fill*[S: ByteStream](r: var BufReader[S]; deadline = never;
+                         tok: nil CancelToken = nil): int {.passive.} =
+  fill(addr r, deadline, tok)
+
+from zal_net/io import IoResult
+proc readExactly*[S: ByteStream](r: var BufReader[S]; buffer: var openArray[byte];
+                                deadline = never; tok: nil CancelToken = nil): IoResult {.passive.} =
+  ## Preserve partial progress on EOF, cancellation and I/O failure.
+  result = default(IoResult)
+  retain(tok)
+  defer: release(tok)
+  while result.bytes < buffer.len:
+    let count = recvInto(addr r, addr buffer[result.bytes], buffer.len - result.bytes, deadline, tok)
+    if count <= 0:
+      result.error = if count == 0: StreamEof else: count
+      return
+    result.bytes += count

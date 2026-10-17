@@ -98,7 +98,7 @@ proc sender(c: TcpStreamPtr) {.passive.} =
     sent = sent + n
   shutdownWrite(c)
 
-proc roundTrip[S: ByteStream](c: S) {.passive.} =
+proc roundTrip[S: ByteStream](c: S) {.passive, untyped.} =
   ## Send Total bytes (from a second task), read them all back, then EOF.
   when S is TcpStreamPtr:
     spawnTask sender(c)
@@ -250,10 +250,13 @@ proc main() {.passive.} =
   assert readLine(addr r, addr line) == 0 and line == ""
   let h = readUntil(addr r, "\r\n\r\n")
   assert h == 11, $h
-  assert peek(addr r)[0] == byte('H')
-  consume(addr r, h)
+  block:
+    let head = peek(r)
+    assert head.len >= h and head[0] == byte('H')
+  consume(r, h)
   var body = default(array[25, byte])
-  assert readExactly(addr r, addr body[0], body.len)
+  let exact = readExactly(r, body)
+  assert exact.bytes == body.len and exact.error == 0
   assert body[0] == byte('b') and body[24] == byte('f')
   assert readLine(addr r, addr line) == 0          # the "\n" after the body
   assert readLine(addr r, addr line) == 4 and line == "last"

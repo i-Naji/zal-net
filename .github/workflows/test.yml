@@ -33,6 +33,7 @@ jobs:
         run: |
           scripts/nimony-setup.sh build/toolchain
           NIMONY=build/toolchain/bin/nimony SUITE=full PRUNE_CASE_CACHES=1 scripts/test.sh
+          NIMONY=build/toolchain/bin/nimony scripts/test-contracts.sh
           MODE=release scripts/test-stdlib.sh build/toolchain
       - name: Build Nimony and test on Windows
         if: runner.os == 'Windows'

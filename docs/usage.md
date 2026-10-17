@@ -38,3 +38,10 @@ closing a stream is immediate.
 
 Linux offloads and raw-network/TUN tests need native capabilities and permissions.
 Platform errors and unavailable checks are kept explicit.
+
+`peek(reader)` returns a checked borrowed slice. End its scope before calling
+`fill(reader)` or `consume(reader, count)`. Pointer overloads are for low-level
+callers that manage this lifetime themselves. `readExactly(reader, buffer)`
+returns `IoResult`, including bytes received before EOF or failure.
+Run `NIMONY=build/toolchain/bin/nimony scripts/test-contracts.sh` to check that
+invalid borrows and managed channel payloads are rejected by the compiler.

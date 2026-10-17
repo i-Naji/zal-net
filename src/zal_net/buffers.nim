@@ -31,7 +31,7 @@ proc dataPtr*(a: openArray[byte]): pointer {.inline.} =
   if a.len == 0: result = addr emptyByte[0]
   else: result = cast[pointer](unsafeAddr a[0])
 
-proc view*(a: openArray[byte]): ByteView {.inline.} =
+proc view*(a: openArray[byte]): ByteView {.inline, establishesBorrow.} =
   ByteView(data: bytesPtr(dataPtr(a)), len: a.len)
 
 proc mutableWindow*(buffer: var openArray[byte]): openArray[byte] {.inline, establishesBorrow.} =
