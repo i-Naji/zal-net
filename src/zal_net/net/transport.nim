@@ -19,9 +19,7 @@ type
     dispose*: proc (ctx: pointer): int {.nimcall.}
     checkTransfer*: proc (ctx: pointer): int {.nimcall.}
       ## Nonmutating admission check: reject pending operations before transfer.
-  KeepAlive[T] = ref object of RootObj
-    value: T
-  TransportObj = object
+  TransportObj = object of RootObj
     owner: nil RootRef
     context: nil pointer
     operations: StreamOps
@@ -29,23 +27,29 @@ type
     life: OwnerLife
     active: bool
   Transport* = ref TransportObj
+  RetainedTransport[T] = ref object of TransportObj
+    value: T
+  OwnedTransport[T] = ref object of TransportObj
+    value: owned T
   TransportResult* = object
     value*: nil Transport
     code*: int
-
-proc `=destroy`(transport: var TransportObj) =
-  # Concrete owner destruction is responsible for quiescent native disposal.
-  # No passive callback or runtime operation is entered by a destructor.
-  transport.owner = nil
 
 proc retainTransport*[T: ref](owner: T; operations: StreamOps;
                          control: TransportControl): Transport =
   ## Callbacks receive the opaque reference representation: cast ctx to T,
   ## never ptr T or ptr typeof(owner[]). Each callback must preserve its owner.
-  let keep = KeepAlive[T](value: owner)
   let context = borrowRefContext(owner)
-  result = Transport(owner: RootRef(keep), context: context, operations: operations,
-                     control: control, active: true)
+  result = Transport(RetainedTransport[T](value: owner, context: context,
+    operations: operations, control: control, active: true))
+  initOwnerLife(result.life)
+
+proc ownTransport*[T: ref](owner: sink owned T; operations: StreamOps;
+                          control: TransportControl): Transport =
+  ## Move the concrete owner into a shared adapter. Callbacks borrow it.
+  let context = borrowRefContext(owner)
+  result = Transport(OwnedTransport[T](value: owner, context: context,
+    operations: operations, control: control, active: true))
   initOwnerLife(result.life)
 
 proc isOpen*(transport: Transport): bool {.inline.} =
@@ -71,7 +75,9 @@ proc takeTransport*(transport: Transport): TransportResult =
   result = default(TransportResult)
   result.code = canTransfer(transport)
   if result.code == 0:
-    let taken = Transport(owner: transport.owner, context: transport.context,
+    let previous = transport.owner
+    let storage = if previous == nil: RootRef(transport) else: previous
+    let taken = Transport(owner: storage, context: transport.context,
       operations: transport.operations, control: transport.control,
       active: true)
     initOwnerLife(taken.life)
@@ -183,3 +189,43 @@ template writeAll*(transport: Transport; buffer: openArray[byte];
     let held = transport
     let bytes: openArray[byte] = buffer
     writeAll(held, dataPtr(bytes), bytes.len, deadline, tok)
+
+proc readOwner[T: ref](ctx: pointer; p: pointer; n: int; deadline: Deadline;
+                       tok: nil CancelToken): int {.passive, untyped.} =
+  mixin recvInto
+  let owner = cast[T](ctx)
+  recvInto(owner, p, n, deadline, tok)
+proc writeOwner[T: ref](ctx: pointer; p: pointer; n: int; deadline: Deadline;
+                        tok: nil CancelToken): int {.passive, untyped.} =
+  mixin sendFrom
+  let owner = cast[T](ctx)
+  sendFrom(owner, p, n, deadline, tok)
+proc halfCloseOwner[T: ref](ctx: pointer) {.untyped.} =
+  mixin shutdownWrite
+  let owner = cast[T](ctx)
+  shutdownWrite(owner)
+proc interruptOwner[T: ref](ctx: pointer) {.untyped.} =
+  mixin interrupt
+  let owner = cast[T](ctx)
+  interrupt(owner)
+proc closeOwner[T: ref](ctx: pointer): int {.passive, untyped.} =
+  mixin close
+  let owner = cast[T](ctx)
+  close(owner)
+proc disposeOwner[T: ref](ctx: pointer): int {.untyped.} =
+  mixin dispose
+  let owner = cast[T](ctx)
+  dispose(owner)
+proc transferOwner[T: ref](ctx: pointer): int {.untyped.} =
+  mixin canTransfer
+  let owner = cast[T](ctx)
+  canTransfer(owner)
+
+proc retainTransport*[T: ref](owner: T): Transport {.untyped.} =
+  ## Adapt recvInto, sendFrom, shutdownWrite, interrupt, close, dispose and
+  ## canTransfer. I/O takes a deadline and token; cleanup returns an error code.
+  retainTransport(owner,
+    StreamOps(recv: readOwner[T], send: writeOwner[T],
+      shutdownWrite: halfCloseOwner[T], interrupt: interruptOwner[T]),
+    TransportControl(close: closeOwner[T], dispose: disposeOwner[T],
+      checkTransfer: transferOwner[T]))

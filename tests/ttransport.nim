@@ -3,6 +3,7 @@
 import std/[assertions, syncio]
 import zal_net/[rt, io]
 import zal_net/net/transport
+import zal_net/unsafe/refcontext
 import zal_net/rt/sync
 import ../examples/headers
 
@@ -48,9 +49,27 @@ proc closeMemory(ctx: pointer): int {.passive.} =
   result = disposeMemory(ctx)
 proc transferMemory(ctx: pointer): int = 0
 
+proc recvInto(memory: Memory; p: pointer; n: int; until: Deadline;
+              tok: nil CancelToken): int {.passive.} =
+  readMemory(borrowRefContext(memory), p, n, until, tok)
+proc sendFrom(memory: Memory; p: pointer; n: int; until: Deadline;
+              tok: nil CancelToken): int {.passive.} =
+  writeMemory(borrowRefContext(memory), p, n, until, tok)
+proc shutdownWrite(memory: Memory) = discard
+proc interrupt(memory: Memory) = setEvent(addr memory.done)
+proc dispose(memory: Memory): int =
+  inc closes
+  0
+proc close(memory: Memory): int {.passive.} = dispose(memory)
+proc canTransfer(memory: Memory): int = 0
+
 proc createMemory(blocked = false; pauseWrites = false): Transport =
   let memory = Memory(blocked: blocked, pauseWrites: pauseWrites)
-  result = retainTransport(memory,
+  result = retainTransport(memory)
+
+proc createOwnedMemory(): Transport =
+  let ownedMemory: owned Memory = Memory()
+  result = ownTransport(ownedMemory,
     StreamOps(recv: readMemory, send: writeMemory,
       shutdownWrite: halfClose, interrupt: interruptMemory),
     TransportControl(close: closeMemory, dispose: disposeMemory,
@@ -127,6 +146,18 @@ proc main() {.passive.} =
     setEvent(addr writeContinue)
     assert wait(addr writeDone, afterMs(2000)) == wrReady
     assert close(stream) == 0
+  block:
+    let before = destroyed
+    block:
+      let stream = createOwnedMemory()
+      var current = stream
+      for i in 0..<32:
+        let transferred = takeTransport(current)
+        let next = transferred.value
+        assert transferred.code == 0 and next != nil
+        if next != nil: current = next
+      assert close(current) == 0
+    assert destroyed == before + 1
   echo "PASS retained transport lifetime, transfer, partial I/O, write exclusion and close drain"
 
 assert runMain(main())

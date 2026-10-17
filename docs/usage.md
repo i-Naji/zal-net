@@ -45,3 +45,15 @@ callers that manage this lifetime themselves. `readExactly(reader, buffer)`
 returns `IoResult`, including bytes received before EOF or failure.
 Run `NIMONY=build/toolchain/bin/nimony scripts/test-contracts.sh` to check that
 invalid borrows and managed channel payloads are rejected by the compiler.
+
+`retainTransport(owner)` builds a transport from the owner's `recvInto`,
+`sendFrom`, `shutdownWrite`, `interrupt`, `close`, `dispose` and `canTransfer`
+procedures. Read and write accept a pointer, count, deadline and cancellation
+token. Close, dispose and transfer checks return an integer error code.
+The adapter and its retained owner slot share one allocation.
+
+`ownTransport(owner, operations, control)` takes a `sink owned` reference
+when a constructor wants to hand off its concrete owner. Build this in an
+ordinary procedure, then pass the returned shared transport to passive code.
+The current compiler cannot lower an owned reference local in a passive frame.
+Transfer still checks for pending I/O and invalidates existing adapter aliases.
