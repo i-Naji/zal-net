@@ -29,12 +29,41 @@ proc watchdog() {.passive.} =
     setEvent(addr allowCleanup)
   setEvent(addr watchdogDone)
 
+proc waitForBorrowers(gate: ptr OwnerLife; entered, done: ptr Event) {.passive.} =
+  setEvent(entered)
+  drainBorrowers(gate)
+  setEvent(done)
+
+proc checkAcknowledgement(controlLast: bool) {.passive.} =
+  var gate = default(OwnerLife)
+  var entered, done = default(Event)
+  initOwnerLife(gate)
+  assert beginBorrow(gate, false) == 0
+  assert beginControl(gate) == 0
+  assert beginClose(gate) == 0
+  assert trySpawnTask(waitForBorrowers(addr gate, addr entered, addr done))
+  assert wait(addr entered, afterMs(2000)) == wrReady
+  for turn in 0..<32: yieldNow()
+  if controlLast: endBorrow(gate, false)
+  else: endControl(gate)
+  assert not isIdle(gate) and not isSet(addr done)
+  if controlLast: endControl(gate)
+  else: endBorrow(gate, false)
+  let outcome = wait(addr done, afterMs(2000))
+  if outcome != wrReady:
+    markClosed(gate)
+    discard wait(addr done, afterMs(2000))
+  assert outcome == wrReady, "last operation wakes a parked close without a separate signal"
+  assert claimOwnerCleanup(gate)
+  markClosed(gate)
+
 proc main() {.passive.} =
+  checkAcknowledgement(false)
+  checkAcknowledgement(true)
   initOwnerLife(life)
   assert beginBorrow(life, false) == 0
   assert beginClose(life) == 0
   endBorrow(life, false)
-  signalIdle(life)
   assert beginClose(life) == 0, "repeated close preserves acknowledgement"
   assert trySpawnTask(finishClose())
   # Cleanup is blocked independently until timeout is observed. The watchdog

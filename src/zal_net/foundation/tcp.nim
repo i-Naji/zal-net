@@ -132,7 +132,6 @@ proc cleanup(conn: TcpConnRef) =
 
 proc endBorrow(conn: TcpConnRef; write: bool) =
   endBorrow(conn.life, write)
-  signalIdle(conn.life)
   cleanup(conn)
 
 proc shutdownWrite*(conn: TcpConnRef): int =

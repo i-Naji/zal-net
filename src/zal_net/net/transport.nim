@@ -97,7 +97,6 @@ proc dispose*(transport: Transport): int =
 
 proc finishOperation(transport: Transport; write: bool) =
   endBorrow(transport.life, write)
-  signalIdle(transport.life)
 
 proc gate(transport: Transport): ptr OwnerLife = addr transport.life
 
@@ -156,7 +155,6 @@ proc interrupt*(transport: Transport) =
   if beginControl(transport.life) != 0: return
   interrupt(borrow(transport))
   endControl(transport.life)
-  signalIdle(transport.life)
 proc shutdownWrite*(transport: Transport) =
   if beginBorrow(transport.life, true) != 0: return
   shutdownWrite(borrow(transport))

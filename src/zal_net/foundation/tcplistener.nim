@@ -56,7 +56,6 @@ proc state*(owner: TcpListenerRef): OwnerState {.inline.} = state(owner.life)
 proc cleanup(owner: TcpListenerRef)
 proc finishControl(owner: TcpListenerRef) =
   endControl(owner.life)
-  signalIdle(owner.life)
   cleanup(owner)
 
 proc nativeHandle*(owner: TcpListenerRef): cint =
@@ -91,7 +90,6 @@ proc endAccept(owner: TcpListenerRef) =
   owner.accepting = nil
   owner.tokenLock.release()
   endBorrow(owner.life, false)
-  signalIdle(owner.life)
   cleanup(owner)
 
 proc accepted(owner: TcpListenerRef; stream: var TcpStream; code: int): TcpConnResult =

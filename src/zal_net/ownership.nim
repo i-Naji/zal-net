@@ -41,16 +41,16 @@ proc beginBorrow*(life: var OwnerLife; write: bool): int =
     result = 0
   life.lock.release()
 
+proc signalIdleLocked(life: var OwnerLife) {.inline.} =
+  if life.phase == ownerClosing and not life.reading and not life.writing and life.controls == 0:
+    setEvent(addr life.idle)
+
 proc endBorrow*(life: var OwnerLife; write: bool) =
+  ## Release admission and wake a close waiting for the final borrower.
   life.lock.acquire()
   if write: life.writing = false
   else: life.reading = false
-  life.lock.release()
-
-proc signalIdle*(life: var OwnerLife) =
-  life.lock.acquire()
-  if life.phase == ownerClosing and not life.reading and not life.writing and life.controls == 0:
-    setEvent(addr life.idle)
+  signalIdleLocked(life)
   life.lock.release()
 
 proc beginClose*(life: var OwnerLife; holdInterrupt = false; requireIdle = false): int =
@@ -117,6 +117,7 @@ proc endControl*(life: var OwnerLife) =
   life.lock.acquire()
   dec life.controls
   if life.controls == 0: life.exclusive = false
+  signalIdleLocked(life)
   life.lock.release()
 
 proc beginTransfer*(life: var OwnerLife): int =

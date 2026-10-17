@@ -95,7 +95,6 @@ proc state*(owner: UdpSocketRef): OwnerState {.inline.} = state(owner.life)
 proc cleanup(owner: UdpSocketRef)
 proc finishControl(owner: UdpSocketRef) =
   endControl(owner.life)
-  signalIdle(owner.life)
   cleanup(owner)
 
 proc nativeHandle*(owner: UdpSocketRef): cint =
@@ -141,7 +140,6 @@ proc cleanup(owner: UdpSocketRef) =
 
 proc endOperation(owner: UdpSocketRef; write: bool) =
   endBorrow(owner.life, write)
-  signalIdle(owner.life)
   cleanup(owner)
 
 template recvFrom*(owner: UdpSocketRef; bytes: var openArray[byte];

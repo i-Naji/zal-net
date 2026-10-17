@@ -55,7 +55,6 @@ proc state*(owner: UnixListenerRef): OwnerState {.inline.} = state(owner.life)
 proc cleanup(owner: UnixListenerRef)
 proc finishControl(owner: UnixListenerRef) =
   endControl(owner.life)
-  signalIdle(owner.life)
   cleanup(owner)
 
 proc nativeHandle*(owner: UnixListenerRef): cint =
@@ -93,7 +92,6 @@ proc endAccept(owner: UnixListenerRef) =
   owner.accepting = nil
   owner.tokenLock.release()
   endBorrow(owner.life, false)
-  signalIdle(owner.life)
   cleanup(owner)
 
 proc accepted(owner: UnixListenerRef; stream: var UnixStream; code: int): UnixConnResult =

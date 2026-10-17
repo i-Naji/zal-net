@@ -110,7 +110,6 @@ proc cleanup(conn: UnixConnRef) =
 
 proc endBorrow(conn: UnixConnRef; write: bool) =
   endBorrow(conn.life, write)
-  signalIdle(conn.life)
   cleanup(conn)
 
 template recvInto*(conn: UnixConnRef; bytes: var openArray[byte];
