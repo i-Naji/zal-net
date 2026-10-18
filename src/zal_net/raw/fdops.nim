@@ -18,10 +18,15 @@ import zal_net/net/address
 import zal_net/private/sys/sock
 
 
+const
+  IoChunk* = 64 * 1024  ## the most one inline call moves unless told otherwise
+
 template fdRecvInline*(fd: cint; timeoutMs: int; p: pointer; n: int;
-                       deadline: Deadline; outcome: var int; tok: nil CancelToken = nil; ownerCancel: nil CancelToken = nil; peerCancel: nil CancelToken = nil) =
+                       deadline: Deadline; outcome: var int; tok: nil CancelToken = nil; ownerCancel: nil CancelToken = nil; peerCancel: nil CancelToken = nil;
+                       chunk = IoChunk) =
   ## Suspend in the caller's passive frame; built-in pumps use this to avoid
   ## allocating a child frame for each ready read. Owners/buffers stay borrowed.
+  ## One call moves at most `chunk` bytes, so other tasks get their turn.
   block:
     let operationToken: nil CancelToken = tok
     let ownerToken: nil CancelToken = ownerCancel
@@ -37,7 +42,7 @@ template fdRecvInline*(fd: cint; timeoutMs: int; p: pointer; n: int;
     elif count > 0:
       let d = limit(timeoutMs, deadline)
       var ready = 0
-      ioCheckpoint(min(count, 65536))
+      ioCheckpoint(min(count, chunk))
       while true:
         if cancelled(cancellationSources) or stopping():
           outcome = ECancelled
@@ -45,7 +50,7 @@ template fdRecvInline*(fd: cint; timeoutMs: int; p: pointer; n: int;
         if d <= monoNow():
           outcome = IoTimedOut
           break
-        outcome = readSome(fd, p, min(count, 65536))
+        outcome = readSome(fd, p, min(count, chunk))
         if outcome != IoAgain: break
         parkCancellable(fd, {evRead}, d, cancellationSources, ready)
         if ready <= 0:
@@ -59,7 +64,8 @@ proc fdRecv*(fd: cint; timeoutMs: int; p: pointer; n: int; deadline: Deadline; t
   fdRecvInline(fd, timeoutMs, p, n, deadline, result, tok)
 
 template fdSendInline*(fd: cint; timeoutMs: int; p: pointer; n: int;
-                       deadline: Deadline; outcome: var int; tok: nil CancelToken = nil; ownerCancel: nil CancelToken = nil; peerCancel: nil CancelToken = nil) =
+                       deadline: Deadline; outcome: var int; tok: nil CancelToken = nil; ownerCancel: nil CancelToken = nil; peerCancel: nil CancelToken = nil;
+                       chunk = IoChunk) =
   block:
     let operationToken: nil CancelToken = tok
     let ownerToken: nil CancelToken = ownerCancel
@@ -75,7 +81,7 @@ template fdSendInline*(fd: cint; timeoutMs: int; p: pointer; n: int;
     elif count > 0:
       let d = limit(timeoutMs, deadline)
       var ready = 0
-      ioCheckpoint(min(count, 65536))
+      ioCheckpoint(min(count, chunk))
       while true:
         if cancelled(cancellationSources) or stopping():
           outcome = ECancelled
@@ -83,7 +89,7 @@ template fdSendInline*(fd: cint; timeoutMs: int; p: pointer; n: int;
         if d <= monoNow():
           outcome = IoTimedOut
           break
-        outcome = writeSome(fd, p, min(count, 65536))
+        outcome = writeSome(fd, p, min(count, chunk))
         if outcome != IoAgain: break
         parkCancellable(fd, {evWrite}, d, cancellationSources, ready)
         if ready <= 0:
