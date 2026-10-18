@@ -8,7 +8,7 @@ import zal_net/ownership
 import std/ticketlocks
 import zal_net/private/core/[iocancel, udpops]
 
-export ownership
+export ownership, BatchResult
 from zal_net/net/datagraminfo import DatagramInfo
 export DatagramInfo
 
@@ -205,16 +205,18 @@ template recvBatch*(owner: UdpSocketRef; batch: var MmsgBatch;
     count
 
 template sendBatch*(owner: UdpSocketRef; batch: var MmsgBatch; n: int;
-                    deadline: Deadline = never; tok: nil CancelToken = nil): int =
+                    deadline: Deadline = never; tok: nil CancelToken = nil;
+                    first = 0): BatchResult =
+  ## Retry the unsent suffix with first advanced by the previous result.sent.
   block:
     let held = owner
-    var count = beginOperation(held, true)
-    if count == 0:
+    var outcome = batchResult(0, beginOperation(held, true))
+    if outcome.error == 0:
       defer: endOperation(held, true)
-      count = udpSendBatch(borrowedHandle(held), timeout(held), addr batch, n,
-                           deadline, cancellation(held, tok))
-      if count < 0 and state(held) == ownerClosing: count = ResourceClosed
-    count
+      outcome = udpSendBatch(borrowedHandle(held), timeout(held), addr batch, n,
+                             deadline, cancellation(held, tok), first)
+      if outcome.error < 0 and state(held) == ownerClosing: outcome.error = ResourceClosed
+    outcome
 
 proc startClose(owner: UdpSocketRef): int =
   result = beginClose(owner.life, true)

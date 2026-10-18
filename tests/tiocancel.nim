@@ -96,8 +96,8 @@ proc main() {.passive.} =
   assert batch.cap == 0, "UDP cancellation check 96"
   assert initBatch(batch, 2), "UDP cancellation check 97"
   assert not initBatch(batch, 2), "reinitializing a live batch rejects without losing storage"
-  assert sendBatch(sender, addr batch, -1) == InvalidInput, "UDP cancellation check 99"
-  assert sendBatch(sender, addr batch, 3) == InvalidInput, "UDP cancellation check 100"
+  assert sendBatch(sender, addr batch, -1).error == InvalidInput, "UDP cancellation check 99"
+  assert sendBatch(sender, addr batch, 3).error == InvalidInput, "UDP cancellation check 100"
   let udpToken = newCancelToken()
   var udpDone = default(Event)
   scheduleCancel(udpToken, addr udpDone)

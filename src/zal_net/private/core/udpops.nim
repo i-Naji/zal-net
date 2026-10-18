@@ -168,30 +168,32 @@ proc udpRecvBatch*(fd: cint; timeoutMs: int; b: ptr MmsgBatch; deadline = never;
     if res <= 0: return (if res < 0: res else: ResourceClosed)
 
 proc udpSendBatch*(fd: cint; timeoutMs: int; b: ptr MmsgBatch; n: int; deadline = never;
-                tokens: IoCancellation): int {.passive.} =
-  ## The first `n` datagrams set with `setOutgoing`, in as few system calls
-  ## as the kernel takes: how many went out.
-  result = 0
-  if n < 0 or n > b.cap or b.cap > MaxBatchSlots or b.hdrs.len < b.cap or b.slots == nil: return InvalidInput
+                   tokens: IoCancellation; first = 0): BatchResult {.passive.} =
+  ## Send n slots starting at first. Progress and failure remain independent.
+  result = batchResult(0, 0)
+  if first < 0 or n < 0 or first > b.cap or n > b.cap - first or
+      b.cap > MaxBatchSlots or b.hdrs.len < b.cap or b.slots == nil:
+    return batchResult(0, InvalidInput)
   if n == 0: return
   retain(tokens)
   defer: release(tokens)
   let d = limit(timeoutMs, deadline)
-  var res = 0
-  while result < n:
+  var ready = 0
+  while result.sent < n:
     ioCheckpoint(0)
-    if cancelled(tokens): return (if result > 0: result else: ECancelled)
-    if d <= monoNow(): return (if result > 0: result else: IoTimedOut)
-    let k = sendmmsgRaw(fd, addr b.hdrs[result], cuint(n - result), 0)
+    if cancelled(tokens): return batchResult(result.sent, ECancelled)
+    if d <= monoNow(): return batchResult(result.sent, IoTimedOut)
+    let k = sendmmsgRaw(fd, addr b.hdrs[first + result.sent], cuint(n - result.sent), 0)
     if k > 0:
-      result = result + k
+      result.sent += k
     else:
-      if k == 0: return (if result > 0: result else: NoProgress)
+      if k == 0: return batchResult(result.sent, NoProgress)
       let err = int(osLastError())
       if err == EIntr: continue
-      if err != EAgain: return (if result > 0: result else: -err)
-      parkCancellable(fd, {evWrite}, d, tokens, res)
-      if res <= 0: return (if result > 0: result else: (if res < 0: res else: NoProgress))
+      if err != EAgain: return batchResult(result.sent, -err)
+      parkCancellable(fd, {evWrite}, d, tokens, ready)
+      if ready <= 0:
+        return batchResult(result.sent, if ready < 0: ready else: NoProgress)
 
 
 proc udpRecvInfo*(fd: cint; timeoutMs: int; p: pointer; n: int; info: ptr DatagramInfo; deadline: Deadline; tokens: IoCancellation): int {.passive.} =

@@ -32,7 +32,7 @@ import zal_net/private/sys/dgram
 import zal_net/net/datagraminfo
 export datagraminfo
 
-export DefaultTimeoutMs
+export DefaultTimeoutMs, BatchResult
 
 
 
@@ -208,8 +208,8 @@ template recvBatch*(u: UdpSocket; b: ptr MmsgBatch; deadline: Deadline = never;
   udpRecvBatch(nativeHandle(u), u.timeoutMs, b, deadline, ioCancellation(tok))
 
 template sendBatch*(u: UdpSocket; b: ptr MmsgBatch; n: int; deadline: Deadline = never;
-                    tok: nil CancelToken = nil): int =
-  udpSendBatch(nativeHandle(u), u.timeoutMs, b, n, deadline, ioCancellation(tok))
+                    tok: nil CancelToken = nil; first = 0): BatchResult =
+  udpSendBatch(nativeHandle(u), u.timeoutMs, b, n, deadline, ioCancellation(tok), first)
 
 template sendTo*(u: UdpSocket; buf: openArray[byte]; to: SocketAddress; deadline: Deadline = never;
                  tok: nil CancelToken = nil): int =

@@ -43,14 +43,16 @@ proc exercise(receiver, sender, unconnected: UdpSocketRef) {.passive.} =
     freeBatch(incoming)
   outgoing.slots[0].buf[0] = 44
   setOutgoing(outgoing, 0, 1, target.raw)
-  assert sendBatch(unconnected, outgoing, 1, expired) == IoTimedOut
+  assert sendBatch(unconnected, outgoing, 1, expired).error == IoTimedOut
   assert recvFrom(receiver, buffer, source, afterMs(20)) == IoTimedOut
-  assert sendBatch(unconnected, outgoing, 1, afterMs(2000)) == 1
+  let sent = sendBatch(unconnected, outgoing, 1, afterMs(2000))
+  assert sent.sent == 1 and sent.error == 0
   assert recvBatch(receiver, incoming, expired) == IoTimedOut
   assert recvBatch(receiver, incoming, afterMs(2000)) == 1
   assert datagramLen(incoming, 0) == 1 and incoming.slots[0].buf[0] == 44
   # A zero-entry batch does no I/O; an empty datagram still does.
-  assert sendBatch(unconnected, outgoing, 0, expired) == 0
+  let noPackets = sendBatch(unconnected, outgoing, 0, expired)
+  assert noPackets.sent == 0 and noPackets.error == 0
 
   assert trySpawnTask(observer())
   for i in 0..<1024:

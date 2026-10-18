@@ -103,7 +103,8 @@ proc main() {.passive.} =
         assert initBatch(outgoing, 4) and initBatch(incoming, 4)
         # Batch headers preserve IPv4 fallback and mapped dual-stack targets.
         for i in 0..<3: setOutgoing(outgoing, i, i + 1, forFamily(target, family(batchSender)))
-        assert sendBatch(batchSender, outgoing, 3, afterMs(2000)) == 3
+        let sent = sendBatch(batchSender, outgoing, 3, afterMs(2000))
+        assert sent.sent == 3 and sent.error == 0
         var received = 0
         while received < 3:
           let count = recvBatch(receiver, incoming, afterMs(2000))
@@ -111,15 +112,34 @@ proc main() {.passive.} =
           for i in 0..<count:
             assert datagramLen(incoming, i) == received + i + 1
           received += count
-        assert sendBatch(batchSender, outgoing, 0) == 0
-        assert sendBatch(batchSender, outgoing, 5) == InvalidInput
+        let noPackets = sendBatch(batchSender, outgoing, 0)
+        assert noPackets.sent == 0 and noPackets.error == 0
+        assert sendBatch(batchSender, outgoing, 5).error == InvalidInput
+        assert sendBatch(batchSender, outgoing, 1, first = -1).error == InvalidInput
+        assert sendBatch(batchSender, outgoing, 1, first = 4).error == InvalidInput
+        assert sendBatch(batchSender, outgoing, high(int), first = 1).error == InvalidInput
+        let cancelledSend = newCancelToken()
+        cancel(cancelledSend)
+        let stopped = sendBatch(batchSender, outgoing, 1, tok=cancelledSend)
+        assert stopped.sent == 0 and stopped.error == ECancelled
+        release(cancelledSend)
         # A valid first datagram followed by a missing destination forces
         # partial progress on native and fallback sendmmsg implementations.
         setOutgoing(outgoing, 0, 1, forFamily(target, family(batchSender)))
         setOutgoing(outgoing, 1, 1, default(SockAddrBuf))
-        assert sendBatch(batchSender, outgoing, 2, afterMs(2000)) == 1, "partial batch progress preserved"
+        outgoing.slots[0].buf[0] = 71
+        outgoing.slots[1].buf[0] = 72
+        let partial = sendBatch(batchSender, outgoing, 2, afterMs(2000))
+        assert partial.sent == 1 and partial.error < 0, "partial progress retains its error"
         assert recvBatch(receiver, incoming, afterMs(2000)) == 1
-        assert datagramLen(incoming, 0) == 1
+        assert datagramLen(incoming, 0) == 1 and incoming.slots[0].buf[0] == 71
+        setOutgoing(outgoing, 1, 1, forFamily(target, family(batchSender)))
+        let retried = sendBatch(batchSender, outgoing, 2 - partial.sent,
+                                afterMs(2000), first=partial.sent)
+        assert retried.sent == 1 and retried.error == 0
+        assert recvBatch(receiver, incoming, afterMs(2000)) == 1
+        assert datagramLen(incoming, 0) == 1 and incoming.slots[0].buf[0] == 72
+        assert recvBatch(receiver, incoming, afterMs(20)) == IoTimedOut, "retry sends no duplicates"
         freeBatch(outgoing)
         freeBatch(incoming)
         assert close(batchSender) == 0

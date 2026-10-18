@@ -57,3 +57,9 @@ when a constructor wants to hand off its concrete owner. Build this in an
 ordinary procedure, then pass the returned shared transport to passive code.
 The current compiler cannot lower an owned reference local in a passive frame.
 Transfer still checks for pending I/O and invalidates existing adapter aliases.
+
+UDP `sendBatch` returns `BatchResult(sent, error)`: a failure can follow a sent
+prefix. To retry the remainder, advance `first` by `sent` and reduce the requested
+packet count by the same amount. The caller keeps the `MmsgBatch` alive and
+unchanged until the operation completes. An empty packet still sends a datagram;
+a zero-entry batch performs no I/O.

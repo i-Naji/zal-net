@@ -36,6 +36,10 @@ else:
       msg_flags*: cint
 
 type
+  BatchResult* = object
+    sent*: int                   ## packets accepted by the kernel
+    error*: int                  ## zero on success; may accompany partial progress
+
   MmsgHdr* = object   # struct mmsghdr (struct nn_mmsghdr on Darwin)
     msg_hdr*: MsgHdr
     msg_len*: cuint
@@ -56,6 +60,9 @@ type
     ctrl: bool
     hdrs*: seq[MmsgHdr]
     slots*: unchecked ptr UncheckedArray[MsgSlot]   # set while cap > 0
+
+proc batchResult*(sent, error: int): BatchResult {.inline.} =
+  BatchResult(sent: sent, error: error)
 
 # nn_recvmmsg/nn_sendmmsg: Linux's calls (loops over recvmsg/sendmsg on
 # kernels without them, sys/nn_linux.c), loops on Darwin and Windows.
