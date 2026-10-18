@@ -145,6 +145,8 @@ proc udpRecv*(fd: cint; timeoutMs: int; p: pointer; n: int; deadline = never;
     if res <= 0: return (if res < 0: res else: ResourceClosed)
 
 
+# A single POSIX worker already yields at bounded continuation boundaries.
+# Windows and shared pools keep their entry checkpoint for loaded tail latency.
 proc udpRecvBatch*(fd: cint; timeoutMs: int; b: ptr MmsgBatch; deadline = never;
                 tokens: IoCancellation): int {.passive.} =
   ## Up to b.cap datagrams in one system call, after waiting for the
@@ -155,14 +157,20 @@ proc udpRecvBatch*(fd: cint; timeoutMs: int; b: ptr MmsgBatch; deadline = never;
   defer: release(tokens)
   let d = limit(timeoutMs, deadline)
   var res = 0
+  when defined(windows):
+    const checkpointOnEntry = true
+  else:
+    let checkpointOnEntry = runtimeWorkers() != 1
   while true:
-    ioCheckpoint(0)
+    if checkpointOnEntry: ioCheckpoint(0)
     if cancelled(tokens): return ECancelled
     if d <= monoNow(): return IoTimedOut
     let k = recvmmsgBatch(fd, b[], MSG_DONTWAIT)
     if k > 0: return k
     let err = int(osLastError())
-    if k < 0 and err == EIntr: continue
+    if k < 0 and err == EIntr:
+      if not checkpointOnEntry: ioCheckpoint(0)
+      continue
     if k < 0 and err != EAgain: return -err
     parkCancellable(fd, {evRead}, d, tokens, res)
     if res <= 0: return (if res < 0: res else: ResourceClosed)
@@ -179,17 +187,24 @@ proc udpSendBatch*(fd: cint; timeoutMs: int; b: ptr MmsgBatch; n: int; deadline 
   defer: release(tokens)
   let d = limit(timeoutMs, deadline)
   var ready = 0
+  when defined(windows):
+    const checkpointOnEntry = true
+  else:
+    let checkpointOnEntry = runtimeWorkers() != 1
   while result.sent < n:
-    ioCheckpoint(0)
+    if checkpointOnEntry: ioCheckpoint(0)
     if cancelled(tokens): return batchResult(result.sent, ECancelled)
     if d <= monoNow(): return batchResult(result.sent, IoTimedOut)
     let k = sendmmsgRaw(fd, addr b.hdrs[first + result.sent], cuint(n - result.sent), 0)
     if k > 0:
       result.sent += k
+      if result.sent < n and not checkpointOnEntry: ioCheckpoint(0)
     else:
       if k == 0: return batchResult(result.sent, NoProgress)
       let err = int(osLastError())
-      if err == EIntr: continue
+      if err == EIntr:
+        if not checkpointOnEntry: ioCheckpoint(0)
+        continue
       if err != EAgain: return batchResult(result.sent, -err)
       parkCancellable(fd, {evWrite}, d, tokens, ready)
       if ready <= 0:

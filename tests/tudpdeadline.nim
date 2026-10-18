@@ -59,6 +59,13 @@ proc exercise(receiver, sender, unconnected: UdpSocketRef) {.passive.} =
     assert send(sender, [45'u8], afterMs(2000)) == 1
     assert recvFrom(receiver, buffer, source, afterMs(2000)) == 1
   assert isSet(addr observerDone), "ready UDP traffic lets another task run"
+  clearEvent(addr observerDone)
+  assert trySpawnTask(observer())
+  for i in 0..<1024:
+    let sent = sendBatch(unconnected, outgoing, 1, afterMs(2000))
+    assert sent.sent == 1 and sent.error == 0
+    assert recvBatch(receiver, incoming, afterMs(2000)) == 1
+  assert isSet(addr observerDone), "ready UDP batches let another task run"
 
 proc main() {.passive.} =
   let r = bindUdpRef(0, "127.0.0.1")
