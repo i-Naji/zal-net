@@ -203,6 +203,109 @@ proc emitSome(c: Conn; d: DirectionPtr): int {.noinline.} =
         return InFail
   result = 1
 
+# ----------------------------------------------------------------- splice
+
+when defined(linux):
+  const
+    SpliceInvalid = 22                   # EINVAL: these descriptors cannot splice
+    SpliceMissing = 38                   # ENOSYS
+    SplicePipe = 1 shl 20                # pipe size asked for, and bytes per splice
+
+  proc spliceable(c: Conn; d: DirectionPtr): bool {.inline.} =
+    ## Plain to plain, and no hook that looks at the batches.
+    if d.srcFramer != nil or d.dstFramer != nil: return false
+    let h = c.hooks
+    result = h == nil or h.onBatch == nil
+
+  proc pipeToSlots(d: DirectionPtr; pr: cint; held: var int): int =
+    ## What a refused splice left in the pipe, a slots' worth at a time, as
+    ## a batch: its span count, or InFail.
+    if not ensurePayload(d): return InFail
+    let want = min(held, d.slotCount * d.slotMax)
+    var got = 0
+    while got < want:
+      let n = readSome(pr, bufAt(d, slotOff(d, 0) + got), want - got)
+      if n <= 0: return InFail
+      got = got + n
+    held = held - got
+    plainSpans(d, got)
+    result = d.nspans
+
+  proc closePipe(pr, pw: var cint) =
+    if pr >= 0: discard sockClose(pr)
+    if pw >= 0: discard sockClose(pw)
+    pr = -1
+    pw = -1
+
+  template spliceDirection(c: Conn; d: DirectionPtr; pr, pw: cint; moved: ptr int64;
+                           held, sent, res: var int; graceful: var bool; why: var PumpFailure;
+                           code: var int; done: var bool) =
+    ## Socket to socket through the pipe until the source ends or something
+    ## fails (`done`). A refused splice leaves `done` false, and `held`
+    ## bytes in the pipe: the direction goes on through user space. A short
+    ## splice parks first rather than asking again for an EAGAIN.
+    block splicing:
+      var drainedIn = false
+      var fullOut = false
+      while true:
+        if held == 0:
+          if drainedIn:
+            drainedIn = false
+          else:
+            let n = int(nnSplice(d.src, pw, clong(SplicePipe)))
+            if n > 0:
+              held = n
+              drainedIn = n < SplicePipe
+              touchIo(addr c.lastIo)
+              continue
+            if n == 0:
+              done = true
+              if atomicLoad(c.failed, moAcquire): why = pfPeer
+              else: graceful = true
+              break splicing
+            let err = lastErr()
+            if err == SpliceInvalid or err == SpliceMissing: break splicing
+            if err != EAgain:
+              done = true
+              why = pfSource
+              code = -err
+              break splicing
+          sent = 0
+          relayReadPark(c, d, res)
+          if res <= 0:
+            done = true
+            why = pfReadWait
+            code = res
+            break splicing
+          continue
+        if not fullOut:
+          let k = int(nnSpliceOutput(pr, d.dst, clong(held)))
+          if k > 0:
+            held = held - k
+            fullOut = held > 0
+            touchIo(addr c.lastIo)
+            atomicStore(moved[], moved[] + k, moRelaxed)
+            sent = sent + k
+            if sent >= YieldBytes:
+              sent = 0
+              yieldNow()
+            continue
+          let err = if k == 0: 0 else: lastErr()
+          if err == SpliceInvalid or err == SpliceMissing: break splicing
+          if err != EAgain:
+            done = true
+            why = pfSink
+            code = if err == 0: -1 else: -err
+            break splicing
+        fullOut = false
+        sent = 0
+        relayPark(c, d.dst, {evWrite}, res)
+        if res <= 0:
+          done = true
+          why = pfWriteWait
+          code = res
+          break splicing
+
 # ------------------------------------------------------------------- pump
 
 proc pump*(c: Conn; d: DirectionPtr) {.passive.} =
@@ -215,13 +318,37 @@ proc pump*(c: Conn; d: DirectionPtr) {.passive.} =
   var why = pfNone
   var code = 0    # result from the failed operation
   var drained = false   # a plain source's last read came up short: park first
+  var spliceNext = false   # a read filled a whole slot: bulk, splice from here
+  var spliceOff = false
+  var pr: cint = -1        # the splice pipe, and what it holds
+  var pw: cint = -1
+  var held = 0
   let moved = if d == addr c.a: addr c.upBytes else: addr c.downBytes
   block run:
     while true:
+      when defined(linux):
+        if spliceNext and d.nspans == 0:
+          spliceNext = false
+          var p = default(array[2, cint])
+          if nnPipe(addr p[0], cint(SplicePipe)) == 0:
+            pr = p[0]
+            pw = p[1]
+            var done = false
+            spliceDirection(c, d, pr, pw, moved, held, sent, res, graceful, why, code, done)
+            if done: break run
+            if held == 0: closePipe(pr, pw)
+          spliceOff = true                     # refused (or no pipe): user space from here
       if d.nspans == 0:
         while true:
           let f = d.srcFramer
           var k = InAgain
+          when defined(linux):
+            if held > 0:
+              k = pipeToSlots(d, pr, held)     # what a refused splice left, first
+              if held == 0: closePipe(pr, pw)
+              if k > 0: break
+              why = pfFraming
+              break run
           if drained: drained = false
           elif f != nil: k = ingestFramed(c, d, f)
           else: k = ingestPlain(c, d)
@@ -311,6 +438,8 @@ proc pump*(c: Conn; d: DirectionPtr) {.passive.} =
         d.alt = nil
       sent = sent + d.bytes
       drained = d.srcFramer == nil and d.bytes < d.slotCount * d.slotMax
+      when defined(linux):
+        spliceNext = not spliceOff and d.bytes >= d.slotMax and spliceable(c, d)
       atomicStore(moved[], moved[] + d.bytes, moRelaxed)
       let h = c.hooks
       if h != nil:
@@ -331,6 +460,7 @@ proc pump*(c: Conn; d: DirectionPtr) {.passive.} =
       if sent >= YieldBytes:
         sent = 0
         yieldNow()
+  when defined(linux): closePipe(pr, pw)
   finishDir(c, d, graceful, why, code)
 
 template startPumps*(c: Conn) =

@@ -26,6 +26,10 @@
 ## No framer may need more than `HeadRoom` before the first record;
 ## `startPumps` refuses such geometries.
 ##
+## Splice: on Linux, a plain-to-plain direction with no batch hook moves to
+## splice(2) through a pipe once a read fills a slot; a refused splice goes
+## back to the buffer, pipe contents first.
+##
 ## Frameworks: `hooks` (`ConnHooks`) is called after every batch and once
 ## as the connection ends; `ext` holds the framework's per-connection data
 ## (a session), zeroed for each connection.
@@ -53,6 +57,7 @@ import zal_net/private/sys/posix
 import zal_net/private/sys/sock
 import zal_net/net/sockaddr
 import zal_net/raw/socket
+import zal_net/private/sys/splice
 
 # Includes preserve private fields and bind passive templates in one module.
 include zal_net/private/relay/contracts
