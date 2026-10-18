@@ -60,6 +60,16 @@ proc recvSome(fd: cint; buf: pointer; len: int): int =
     if err == EAgain: return IoAgain
     return -err
 
+proc sendSome(fd: cint; buf: pointer; len: int): int =
+  while true:
+    let n = sockSend(fd, buf, csize_t(len), 0)
+    if n > 0: return n
+    if n == 0: return -1
+    let err = lastErr()
+    if err == EIntr: continue
+    if err == EAgain: return IoAgain
+    return -err
+
 proc plainSpans(d: DirectionPtr; total: int) =
   var left = total
   var i = 0
@@ -178,7 +188,12 @@ proc emitSome(c: Conn; d: DirectionPtr): int {.noinline.} =
         return InFail
   else:
     while d.iovAt < d.iovEnd:
-      let n = writevSome(d.dst, addr d.iov[d.iovAt], d.iovEnd - d.iovAt)
+      var n = 0
+      let base = d.iov[d.iovAt].iov_base
+      if d.iovEnd - d.iovAt == 1 and base != nil:
+        n = sendSome(d.dst, base, int(d.iov[d.iovAt].iov_len))
+      else:
+        n = writevSome(d.dst, addr d.iov[d.iovAt], d.iovEnd - d.iovAt)
       if n > 0:
         touchIo(addr c.lastIo)
         advanceWritten(d, n)
