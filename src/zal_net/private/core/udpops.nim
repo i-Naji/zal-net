@@ -34,6 +34,9 @@ template udpSendTo*(fd, family: cint; timeoutMs: int; p: pointer; n: int; to: So
         if cancelled(operationTokens):
           outcome = ECancelled
           break
+        if d <= monoNow():
+          outcome = IoTimedOut
+          break
         let k = sockSendto(descriptor, buffer, csize_t(count), 0, unsafeAddr sa.ss, sa.len)
         if k >= 0:
           outcome = k
@@ -75,6 +78,9 @@ template udpRecvFrom*(fd: cint; timeoutMs: int; p: pointer; n: int; src: nil ptr
         if cancelled(operationTokens):
           outcome = ECancelled
           break
+        if d <= monoNow():
+          outcome = IoTimedOut
+          break
         var sa = default(SockAddrBuf)
         sa.len = cuint(sizeof(SockaddrStorage))
         let k = sockRecvfrom(descriptor, target, csize_t(capacity), 0, addr sa.ss, addr sa.len)
@@ -102,8 +108,10 @@ proc udpSend*(fd: cint; timeoutMs: int; p: pointer; n: int; deadline = never;
   ## On a connected socket.
   let d = limit(timeoutMs, deadline)
   var res = 0
+  ioCheckpoint(min(n, 65536))
   while true:
     if cancelled(tokens): return ECancelled
+    if d <= monoNow(): return IoTimedOut
     let k = sockSend(fd, p, csize_t(n), 0)
     if k >= 0: return k
     let err = int(osLastError())
@@ -124,8 +132,10 @@ proc udpRecv*(fd: cint; timeoutMs: int; p: pointer; n: int; deadline = never;
   let capacity = max(1, n)
   let d = limit(timeoutMs, deadline)
   var res = 0
+  ioCheckpoint(min(n, 65536))
   while true:
     if cancelled(tokens): return ECancelled
+    if d <= monoNow(): return IoTimedOut
     let k = sockRecv(fd, target, csize_t(capacity), 0)
     if k >= 0: return min(k, n)
     let err = int(osLastError())
@@ -146,7 +156,9 @@ proc udpRecvBatch*(fd: cint; timeoutMs: int; b: ptr MmsgBatch; deadline = never;
   let d = limit(timeoutMs, deadline)
   var res = 0
   while true:
+    ioCheckpoint(0)
     if cancelled(tokens): return ECancelled
+    if d <= monoNow(): return IoTimedOut
     let k = recvmmsgBatch(fd, b[], MSG_DONTWAIT)
     if k > 0: return k
     let err = int(osLastError())
@@ -167,7 +179,9 @@ proc udpSendBatch*(fd: cint; timeoutMs: int; b: ptr MmsgBatch; n: int; deadline 
   let d = limit(timeoutMs, deadline)
   var res = 0
   while result < n:
+    ioCheckpoint(0)
     if cancelled(tokens): return (if result > 0: result else: ECancelled)
+    if d <= monoNow(): return (if result > 0: result else: IoTimedOut)
     let k = sendmmsgRaw(fd, addr b.hdrs[result], cuint(n - result), 0)
     if k > 0:
       result = result + k
@@ -190,8 +204,10 @@ proc udpRecvInfo*(fd: cint; timeoutMs: int; p: pointer; n: int; info: ptr Datagr
   let capacity = max(1, n)
   let d = limit(timeoutMs, deadline)
   var res = 0
+  ioCheckpoint(min(n, 65536))
   while true:
     if cancelled(tokens): return ECancelled
+    if d <= monoNow(): return IoTimedOut
     var sa = default(SockAddrBuf)
     sa.len = cuint(sizeof(SockaddrStorage))
     var di {.noinit.}: NnDinfo
@@ -234,8 +250,10 @@ proc udpSendWithSource*(fd, family: cint; timeoutMs: int; p: pointer; n: int; to
     fam = AF_INET6
   let d = limit(timeoutMs, deadline)
   var res = 0
+  ioCheckpoint(min(n, 65536))
   while true:
     if cancelled(tokens): return ECancelled
+    if d <= monoNow(): return IoTimedOut
     let k = nnSendFrom(fd, p, csize_t(n), unsafeAddr sa.ss, sa.len, addr src.bytes[0], fam, cuint(ifIndex))
     if k >= 0: return int(k)
     let err = int(osLastError())

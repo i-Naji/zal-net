@@ -16,7 +16,7 @@ $Workers = @($Workers | ForEach-Object { $_.Split(",") } | Where-Object { $_ })
 $Tests = @($Tests | ForEach-Object { $_.Split(",") } | Where-Object { $_ })
 if ($Tests.Count -eq 0 -and $Suite -ne "full") {
   switch ($Suite) {
-    "fast" { $Tests = @("tcontinuations", "tcompletiondrain", "treadyio", "townership", "ttcpref", "tunixref", "tapplicationtcp", "tapplicationunix", "tapplicationudp", "tapplicationserve", "treaderresults", "ttransport", "ttransportcancel", "tservicedrain") }
+    "fast" { $Tests = @("tcontinuations", "tcompletiondrain", "treadyio", "townership", "ttcpref", "tunixref", "tapplicationtcp", "tapplicationunix", "tapplicationudp", "tudpdeadline", "tapplicationserve", "treaderresults", "ttransport", "ttransportcancel", "tservicedrain") }
     "stress" { $Tests = @("tshutdown", "truntimedrain", "tstdhandoff", "tenginereadiness", "tenginecapacity", "tenginestop", "tengines", "tdatagram") }
     "platform" { $Tests = @("tinterfaces", "tip", "ticmp", "ttun", "turingclose") }
   }
