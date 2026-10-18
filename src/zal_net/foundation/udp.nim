@@ -73,6 +73,7 @@ proc connectUdpRef*(remote: SocketAddress; timeoutMs = DefaultTimeoutMs;
   result = initialized(owner, code)
 
 proc rawSocket(owner: UdpSocketRef): UdpSocketPtr {.inline.} = addr owner.socket
+proc borrowedHandle(owner: UdpSocketRef): cint {.inline.} = nativeHandle(owner.socket)
 proc ownerLife(owner: UdpSocketRef): ptr OwnerLife {.inline.} = addr owner.life
 proc cancellation(owner: UdpSocketRef; tok: nil CancelToken): IoCancellation {.inline.} =
   ioCancellation(tok, owner.stop)
@@ -150,7 +151,7 @@ template recvFrom*(owner: UdpSocketRef; bytes: var openArray[byte];
     var count = beginOperation(held, false)
     if count == 0:
       defer: endOperation(held, false)
-      count = udpRecvFrom(nativeHandle(held), timeout(held), dataPtr(bytes), bytes.len,
+      count = udpRecvFrom(borrowedHandle(held), timeout(held), dataPtr(bytes), bytes.len,
                           addr source, deadline, cancellation(held, tok))
       if count < 0 and state(held) == ownerClosing: count = ResourceClosed
     count
@@ -162,7 +163,7 @@ template sendTo*(owner: UdpSocketRef; bytes: openArray[byte]; to: SocketAddress;
     var count = beginOperation(held, true)
     if count == 0:
       defer: endOperation(held, true)
-      count = udpSendTo(nativeHandle(held), family(held), timeout(held),
+      count = udpSendTo(borrowedHandle(held), family(held), timeout(held),
                         dataPtr(bytes), bytes.len, to, deadline, cancellation(held, tok))
       if count < 0 and state(held) == ownerClosing: count = ResourceClosed
     count
@@ -174,7 +175,7 @@ template recv*(owner: UdpSocketRef; bytes: var openArray[byte];
     var count = beginOperation(held, false)
     if count == 0:
       defer: endOperation(held, false)
-      count = udpRecv(nativeHandle(held), timeout(held), dataPtr(bytes), bytes.len,
+      count = udpRecv(borrowedHandle(held), timeout(held), dataPtr(bytes), bytes.len,
                       deadline, cancellation(held, tok))
       if count < 0 and state(held) == ownerClosing: count = ResourceClosed
     count
@@ -186,7 +187,7 @@ template send*(owner: UdpSocketRef; bytes: openArray[byte];
     var count = beginOperation(held, true)
     if count == 0:
       defer: endOperation(held, true)
-      count = udpSend(nativeHandle(held), timeout(held), dataPtr(bytes), bytes.len,
+      count = udpSend(borrowedHandle(held), timeout(held), dataPtr(bytes), bytes.len,
                       deadline, cancellation(held, tok))
       if count < 0 and state(held) == ownerClosing: count = ResourceClosed
     count
@@ -198,7 +199,7 @@ template recvBatch*(owner: UdpSocketRef; batch: var MmsgBatch;
     var count = beginOperation(held, false)
     if count == 0:
       defer: endOperation(held, false)
-      count = udpRecvBatch(nativeHandle(held), timeout(held), addr batch,
+      count = udpRecvBatch(borrowedHandle(held), timeout(held), addr batch,
                            deadline, cancellation(held, tok))
       if count < 0 and state(held) == ownerClosing: count = ResourceClosed
     count
@@ -210,7 +211,7 @@ template sendBatch*(owner: UdpSocketRef; batch: var MmsgBatch; n: int;
     var count = beginOperation(held, true)
     if count == 0:
       defer: endOperation(held, true)
-      count = udpSendBatch(nativeHandle(held), timeout(held), addr batch, n,
+      count = udpSendBatch(borrowedHandle(held), timeout(held), addr batch, n,
                            deadline, cancellation(held, tok))
       if count < 0 and state(held) == ownerClosing: count = ResourceClosed
     count
@@ -241,7 +242,7 @@ template recvFrom*(owner: UdpSocketRef; bytes: var openArray[byte];
     var count = beginOperation(held, false)
     if count == 0:
       defer: endOperation(held, false)
-      count = udpRecvInfo(nativeHandle(held), timeout(held), dataPtr(bytes), bytes.len,
+      count = udpRecvInfo(borrowedHandle(held), timeout(held), dataPtr(bytes), bytes.len,
                           addr info, deadline, cancellation(held, tok))
       if count < 0 and state(held) == ownerClosing: count = ResourceClosed
     count
@@ -254,7 +255,7 @@ template sendWithSource*(owner: UdpSocketRef; bytes: openArray[byte]; to: Socket
     var count = beginOperation(held, true)
     if count == 0:
       defer: endOperation(held, true)
-      count = udpSendWithSource(nativeHandle(held), family(held), timeout(held),
+      count = udpSendWithSource(borrowedHandle(held), family(held), timeout(held),
                                 dataPtr(bytes), bytes.len, to, source, ifIndex,
                                 deadline, cancellation(held, tok))
       if count < 0 and state(held) == ownerClosing: count = ResourceClosed
