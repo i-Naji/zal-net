@@ -16,9 +16,9 @@ proc readRoom(d: DirectionPtr): int =
     d.fill = HeadRoom + n
   result = BufCap - d.fill
 
-proc ingestFramed(c: Conn; d: DirectionPtr; f: Framer): int {.noinline.} =
+proc ingestFramed(c: Conn; d: DirectionPtr; f: Framer; short: var bool): int {.noinline.} =
   ## Decode what is buffered (`f` is d.srcFramer); read more until a batch
-  ## is ready.
+  ## is ready. `short` says whether the last read left room.
   let ended = f.sourceEnded
   if ended != nil and ended(d): return InEof
   if not hasPayload(d):
@@ -36,6 +36,7 @@ proc ingestFramed(c: Conn; d: DirectionPtr; f: Framer): int {.noinline.} =
     if n > 0:
       touchIo(addr c.lastIo)
       d.fill = d.fill + n
+      short = n < room
     elif n == IoAgain:
       return InAgain
     elif n == 0:
@@ -47,6 +48,13 @@ proc ingestFramed(c: Conn; d: DirectionPtr; f: Framer): int {.noinline.} =
       if rf == nil: return InFail
       let k = rf(c, d, err)
       if k != InAgain: return k
+
+proc drainedFramed(d: DirectionPtr; f: Framer): bool =
+  ## Nothing buffered, no record half open, no end seen: only the socket
+  ## can bring more.
+  if d.off < d.fill or not f.atBoundary(d): return false
+  let ended = f.sourceEnded
+  result = ended == nil or not ended(d)
 
 # ----------------------------------------------------------- plain source
 
@@ -317,7 +325,8 @@ proc pump*(c: Conn; d: DirectionPtr) {.passive.} =
   var first = true
   var why = pfNone
   var code = 0    # result from the failed operation
-  var drained = false   # a plain source's last read came up short: park first
+  var drained = false   # the source's last read came up short: park first
+  var short = false
   var spliceNext = false   # a read filled a whole slot: bulk, splice from here
   var spliceOff = false
   var pr: cint = -1        # the splice pipe, and what it holds
@@ -350,7 +359,7 @@ proc pump*(c: Conn; d: DirectionPtr) {.passive.} =
               why = pfFraming
               break run
           if drained: drained = false
-          elif f != nil: k = ingestFramed(c, d, f)
+          elif f != nil: k = ingestFramed(c, d, f, short)
           else: k = ingestPlain(c, d)
           if k > 0: break
           if k == InEof and atomicLoad(c.failed, moAcquire):
@@ -437,7 +446,10 @@ proc pump*(c: Conn; d: DirectionPtr) {.passive.} =
         giveAlt(alt)                     # a one-time split: the block goes back
         d.alt = nil
       sent = sent + d.bytes
-      drained = d.srcFramer == nil and d.bytes < d.slotCount * d.slotMax
+      let sf = d.srcFramer
+      if sf == nil: drained = d.bytes < d.slotCount * d.slotMax
+      else: drained = short and drainedFramed(d, sf)
+      short = false
       when defined(linux):
         spliceNext = not spliceOff and d.bytes >= d.slotMax and spliceable(c, d)
       atomicStore(moved[], moved[] + d.bytes, moRelaxed)
