@@ -36,13 +36,7 @@ import zal_net/private/sys/sock
 import zal_net/rt/cancel
 import zal_net/private/core/iocancel
 
-when defined(linux):
-  {.compile: "../private/sys/nn_stream.c".}
-  proc nnPipe(fds: ptr cint; size: cint): cint {.importc: "nn_pipe".}
-  proc nnSplice(fdIn, fdOut: cint; len: clong): clong {.importc: "nn_splice".}
-  proc nnSpliceOutput(fdIn, fdOut: cint; len: clong): clong {.importc: "nn_splice_output".}
-  when defined(nnStreamFaultTest):
-    {.passC: "-DNN_STREAM_FAULT_TEST".}
+import zal_net/private/sys/splice
 
 
 type
