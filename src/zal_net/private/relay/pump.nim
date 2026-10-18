@@ -50,6 +50,16 @@ proc ingestFramed(c: Conn; d: DirectionPtr; f: Framer): int {.noinline.} =
 
 # ----------------------------------------------------------- plain source
 
+proc recvSome(fd: cint; buf: pointer; len: int): int =
+  ## recv(2), not read(2): no file-position lock on the way to the socket.
+  while true:
+    let n = sockRecv(fd, buf, csize_t(len), 0)
+    if n >= 0: return n
+    let err = lastErr()
+    if err == EIntr: continue
+    if err == EAgain: return IoAgain
+    return -err
+
 proc plainSpans(d: DirectionPtr; total: int) =
   var left = total
   var i = 0
@@ -70,12 +80,17 @@ proc ingestPlain(c: Conn; d: DirectionPtr): int {.noinline.} =
     if ready == 0: return InEof
     if ready < 0: return InFail
     if not ensurePayload(d): return InFail
-  var i = 0
-  while i < d.slotCount:
-    d.iov[i].iov_base = bufAt(d, slotOff(d, i))
-    d.iov[i].iov_len = csize_t(d.slotMax)
-    i = i + 1
-  let n = readvSome(d.src, addr d.iov[0], d.slotCount)
+  var n = 0
+  if d.slotStride == d.slotMax:
+    # No gaps between the slots: one plain read.
+    n = recvSome(d.src, bufAt(d, slotOff(d, 0)), d.slotCount * d.slotMax)
+  else:
+    var i = 0
+    while i < d.slotCount:
+      d.iov[i].iov_base = bufAt(d, slotOff(d, i))
+      d.iov[i].iov_len = csize_t(d.slotMax)
+      i = i + 1
+    n = readvSome(d.src, addr d.iov[0], d.slotCount)
   if n > 0:
     touchIo(addr c.lastIo)
     plainSpans(d, n)
@@ -184,13 +199,17 @@ proc pump*(c: Conn; d: DirectionPtr) {.passive.} =
   var first = true
   var why = pfNone
   var code = 0    # result from the failed operation
+  var drained = false   # a plain source's last read came up short: park first
   let moved = if d == addr c.a: addr c.upBytes else: addr c.downBytes
   block run:
     while true:
       if d.nspans == 0:
         while true:
           let f = d.srcFramer
-          let k = if f != nil: ingestFramed(c, d, f) else: ingestPlain(c, d)
+          var k = InAgain
+          if drained: drained = false
+          elif f != nil: k = ingestFramed(c, d, f)
+          else: k = ingestPlain(c, d)
           if k > 0: break
           if k == InEof and atomicLoad(c.failed, moAcquire):
             why = pfPeer                              # woken by the other direction's failure
@@ -276,6 +295,7 @@ proc pump*(c: Conn; d: DirectionPtr) {.passive.} =
         giveAlt(alt)                     # a one-time split: the block goes back
         d.alt = nil
       sent = sent + d.bytes
+      drained = d.srcFramer == nil and d.bytes < d.slotCount * d.slotMax
       atomicStore(moved[], moved[] + d.bytes, moRelaxed)
       let h = c.hooks
       if h != nil:
