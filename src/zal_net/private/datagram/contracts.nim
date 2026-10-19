@@ -132,10 +132,13 @@ type
                       pay: ptr UncheckedArray[byte]; payLen: int;
                       outp: ptr UncheckedArray[byte]; outCap: int; now: int64): int {.nimcall.}
       ## The reply at `outp`, which has room for payLen +
-      ## replyOverhead bytes (at most UdpMax); its length, or 0 to drop.
+      ## replyOverhead bytes (at most UdpMax); its length, or 0 to drop
+      ## unless emptyReplies is set. Negative results always drop.
       ## src borrows address bytes for this callback. replyOverhead includes
       ## every header byte, including any address encoding chosen by the codec.
     replyOverhead*: int
+    emptyReplies*: bool
+      ## A zero-length seal result sends an empty datagram instead of dropping it.
     bindListener*: nil proc (e: ptr DatagramEngine; ib: ptr Listener): bool {.nimcall.}
     unbindListener*: nil proc (ib: ptr Listener) {.nimcall.}
     freeAssoc*: nil proc (a: ptr Assoc) {.nimcall.}

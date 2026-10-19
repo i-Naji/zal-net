@@ -312,7 +312,7 @@ proc tunnelReply(e: ptr DatagramEngine; slot: int; src: EndpointView;
   if payLen > 0: copyMem(addr outp[0], addr pay[0], payLen)
   result = payLen
 
-let tunnelCodec* = ListenerCodec(open: tunnelOpen, sealReply: tunnelReply, replyOverhead: 0)
+let tunnelCodec* = ListenerCodec(open: tunnelOpen, sealReply: tunnelReply, replyOverhead: 0, emptyReplies: true)
 
 # ----------------------------------------------------------------- listing
 

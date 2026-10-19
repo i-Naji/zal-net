@@ -55,18 +55,22 @@ proc emitReply(e: ptr DatagramEngine; slot: int; fd: cint; src: EndpointView;
   if len < 0 or k.replyOverhead < 0 or k.replyOverhead > UdpMax or
       len > UdpMax - k.replyOverhead: return
   let capacity = len + k.replyOverhead
-  if e.tx.gsoOff:
+  if e.tx.gsoOff or capacity == 0:
     if e.tx.outN == e.tx.outB.cap: flushOut(e.tx, fd)
     let p = cast[ptr UncheckedArray[byte]](addr e.tx.outB.slots[e.tx.outN].buf[0])
     let sz = k.sealReply(e, slot, src, pay, len, p, capacity, now)
-    if sz > 0 and sz <= capacity:
+    if sz >= 0 and sz <= capacity and (sz > 0 or k.emptyReplies):
       setOutgoing(e.tx.outB[], e.tx.outN, sz, a.peer)
       e.tx.outN = e.tx.outN + 1
       a.down = a.down + len
   else:
     let p = runRoom(e.tx, addr e.reply, fd, a.peer, len + k.replyOverhead, true)
     let sz = k.sealReply(e, slot, src, pay, len, p, capacity, now)
-    if sz > 0 and sz <= capacity:
+    if sz == 0 and k.emptyReplies:
+      flushRun(e.tx, addr e.reply, true)
+      flushOut(e.tx, fd)
+      discard sockSendto(fd, p, 0, 0, addr a.peer.ss, a.peer.len)
+    elif sz > 0 and sz <= capacity:
       runCommit(e.tx, addr e.reply, sz, true)
       a.down = a.down + len
 
