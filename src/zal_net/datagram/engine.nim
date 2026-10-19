@@ -103,6 +103,27 @@ proc interruptRetired(fd: cint) =
   local.len = cuint(sizeof(SockaddrStorage))
   if sockGetsockname(fd, addr local.ss, addr local.len) == 0:
     let family = cint(local.ss.ss_family)
+    when defined(windows):
+      # A pending Windows UDP read needs readable data before the handle can
+      # retire. Loop one byte back to this socket, without releasing its fd.
+      let view = socketEndpointView(addr local.ss, local.len)
+      if valid(view) and view.port != 0:
+        var wakeAddr = local
+        let ip = view.data
+        var wildcard = true
+        if ip != nil:
+          for i in 0 ..< view.len:
+            if ip[i] != 0: wildcard = false
+        if wildcard:
+          if family == AF_INET:
+            discard setIpAddr(wakeAddr, [127'u8, 0, 0, 1], view.port, family)
+          else:
+            var loopback = default(array[16, byte])
+            loopback[15] = 1
+            discard setIpAddr(wakeAddr, loopback, view.port, family)
+        if sockConnect(fd, addr wakeAddr.ss, wakeAddr.len) == 0:
+          var wake = 0'u8
+          if sockSend(fd, addr wake, 1, 0) == 1: return
     var peer = default(SockAddrBuf)
     var lo = default(array[16, byte])
     lo[15] = 1
