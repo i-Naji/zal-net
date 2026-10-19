@@ -43,8 +43,9 @@ template parkCancellable*(fd: cint; events: IoEvents; deadline: Deadline;
                           tokens: IoCancellation; outcome: var int) =
   block:
     var slice = CancelPollMs
-    # Only the owner's stop token: close and runtime stop interrupt the socket.
-    let owned = tokens.interrupts and tokens.operation == nil and tokens.peerStop == nil and
+    # WSAPoll does not reliably report a local shutdown. Keep bounded token
+    # checks on Windows even when the owner shuts down its streams.
+    let owned = not defined(windows) and tokens.interrupts and tokens.operation == nil and tokens.peerStop == nil and
       tokens.ownerStop != nil and enterParked(fd)
     while true:
       if cancelled(tokens) or (owned and stopping()):

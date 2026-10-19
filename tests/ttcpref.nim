@@ -11,7 +11,7 @@ var readCode = 0
 proc readPending(conn: sink TcpConnRef) {.passive.} =
   var bytes = default(array[8, byte])
   setEvent(addr entered)
-  readCode = recvInto(conn, bytes, afterMs(2000))
+  readCode = recvInto(conn, bytes, never)
   setEvent(addr finished)
 
 proc main() {.passive.} =
@@ -32,6 +32,7 @@ proc main() {.passive.} =
     assert wait(addr entered, afterMs(2000)) == wrReady, "friendly owner check 36"
     var bytes = default(array[8, byte])
     assert recvInto(conn, bytes) == ResourceBusy, "friendly owner check 38"
+    parkUntil(afterMs(30)) # Let the read park before closing its owner.
     assert close(conn, afterMs(2000)) == 0, "friendly owner check 39"
     assert wait(addr finished, afterMs(2000)) == wrReady, "friendly owner check 40"
     assert readCode == ResourceClosed, "friendly owner check 41"
