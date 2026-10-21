@@ -10,7 +10,7 @@ from zal_net/raw/fdops import fdRecvInline, fdSendInline
 import zal_net/net/stream as copying
 import zal_net/net/address
 import zal_net/ownership
-import std/ticketlocks
+import std/[atomics, ticketlocks]
 
 export ownership
 
@@ -21,6 +21,7 @@ type
     stop: nil CancelToken            ## one cancellation source per owner
     failureLock: TicketLock
     readFailure, writeFailure: IoFailure
+    standing: int64                  ## standing deadline, 0 for none; atomic
   TcpConnRef* = ref TcpConnObj
   TcpConnResult* = object
     value*: nil TcpConnRef           ## nil on failure; caller owns on success
@@ -117,6 +118,20 @@ proc recordWrite*(conn: TcpConnRef; code: int; transferred = 0) =
   conn.writeFailure = IoFailure(code: code, transferred: transferred)
   conn.failureLock.release()
 
+proc deadline*(conn: TcpConnRef): Deadline =
+  ## The standing deadline each read and write honours besides its own.
+  let at = atomicLoad(conn.standing, moRelaxed)
+  result = if at == 0: never else: Deadline(at)
+
+proc renew*(conn: TcpConnRef; deadline: Deadline) =
+  ## Replace the standing deadline; `never` clears it. A parked operation
+  ## keeps the deadline it started with.
+  atomicStore(conn.standing, (if deadline == never: 0'i64 else: int64(deadline)), moRelaxed)
+
+proc bounded(conn: TcpConnRef; deadline: Deadline): Deadline {.inline.} =
+  let at = atomicLoad(conn.standing, moRelaxed)
+  result = if at == 0: deadline else: earlier(deadline, Deadline(at))
+
 proc ownerLife(conn: TcpConnRef): ptr OwnerLife {.inline.} = addr conn.life
 proc streamPointer(conn: TcpConnRef): TcpStreamPtr {.inline.} = addr conn.stream
 proc idleTimeout(conn: TcpConnRef): int {.inline.} = conn.stream.timeoutMs
@@ -155,7 +170,7 @@ template recvInto*(conn: TcpConnRef; p: pointer; n: int;
     if count == 0:
       defer: endBorrow(held, false)
       let buffer = p
-      fdRecvInline(nativeHandle(held), idleTimeout(held), buffer, n, deadline, count, tok, ownerStopToken(held))
+      fdRecvInline(nativeHandle(held), idleTimeout(held), buffer, n, bounded(held, deadline), count, tok, ownerStopToken(held))
       if count <= 0 and state(held) == ownerClosing: count = ResourceClosed
     count
 
@@ -167,7 +182,7 @@ template sendFrom*(conn: TcpConnRef; p: pointer; n: int;
     if count == 0:
       defer: endBorrow(held, true)
       let buffer = p
-      fdSendInline(nativeHandle(held), idleTimeout(held), buffer, n, deadline, count, tok, ownerStopToken(held))
+      fdSendInline(nativeHandle(held), idleTimeout(held), buffer, n, bounded(held, deadline), count, tok, ownerStopToken(held))
       if count <= 0 and state(held) == ownerClosing: count = ResourceClosed
     count
 
@@ -245,7 +260,7 @@ template writeAllInto*(owner: TcpConnRef; p: pointer; n: int;
     let held = owner
     let source = p
     let size = n
-    let until: Deadline = deadline
+    let until: Deadline = bounded(held, deadline)
     let token: nil CancelToken = tok
     retain(token)
     defer: release(token)

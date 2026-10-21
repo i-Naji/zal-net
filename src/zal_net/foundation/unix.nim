@@ -7,7 +7,7 @@ from zal_net/io import IoResult, ioResult
 import zal_net/[rt, errors], zal_net/rt/[sync, cancel]
 import zal_net/raw/unix
 import zal_net/ownership
-import std/ticketlocks
+import std/[atomics, ticketlocks]
 from zal_net/raw/fdops import fdRecvInline, fdSendInline
 from zal_net/buffers import dataPtr, bytesPtr, offset
 
@@ -20,6 +20,7 @@ type
     stop: nil CancelToken            ## one cancellation source per owner
     failureLock: TicketLock
     readFailure, writeFailure: IoFailure
+    standing: int64                  ## standing deadline, 0 for none; atomic
   UnixConnRef* = ref UnixConnObj
   UnixConnResult* = object
     value*: nil UnixConnRef           ## nil on failure; caller owns on success
@@ -103,6 +104,20 @@ proc idleTimeout(conn: UnixConnRef): int {.inline.} = conn.stream.timeoutMs
 proc ownerStopToken(conn: UnixConnRef): nil CancelToken {.inline.} = conn.stop
 proc ownerLife(conn: UnixConnRef): ptr OwnerLife {.inline.} = addr conn.life
 
+proc deadline*(conn: UnixConnRef): Deadline =
+  ## The standing deadline each read and write honours besides its own.
+  let at = atomicLoad(conn.standing, moRelaxed)
+  result = if at == 0: never else: Deadline(at)
+
+proc renew*(conn: UnixConnRef; deadline: Deadline) =
+  ## Replace the standing deadline; `never` clears it. A parked operation
+  ## keeps the deadline it started with.
+  atomicStore(conn.standing, (if deadline == never: 0'i64 else: int64(deadline)), moRelaxed)
+
+proc bounded(conn: UnixConnRef; deadline: Deadline): Deadline {.inline.} =
+  let at = atomicLoad(conn.standing, moRelaxed)
+  result = if at == 0: deadline else: earlier(deadline, Deadline(at))
+
 proc cleanup(conn: UnixConnRef) =
   if claimOwnerCleanup(conn.life):
     close(addr conn.stream)
@@ -119,7 +134,7 @@ template recvInto*(conn: UnixConnRef; bytes: var openArray[byte];
     var count = beginBorrow(ownerLife(held)[], false)
     if count == 0:
       defer: endBorrow(held, false)
-      fdRecvInline(nativeHandle(held), idleTimeout(held), dataPtr(bytes), bytes.len, deadline, count, tok, ownerStopToken(held))
+      fdRecvInline(nativeHandle(held), idleTimeout(held), dataPtr(bytes), bytes.len, bounded(held, deadline), count, tok, ownerStopToken(held))
       if count <= 0 and state(held) == ownerClosing: count = ResourceClosed
     count
 
@@ -130,7 +145,7 @@ template sendFrom*(conn: UnixConnRef; bytes: openArray[byte];
     var count = beginBorrow(ownerLife(held)[], true)
     if count == 0:
       defer: endBorrow(held, true)
-      fdSendInline(nativeHandle(held), idleTimeout(held), dataPtr(bytes), bytes.len, deadline, count, tok, ownerStopToken(held))
+      fdSendInline(nativeHandle(held), idleTimeout(held), dataPtr(bytes), bytes.len, bounded(held, deadline), count, tok, ownerStopToken(held))
       if count <= 0 and state(held) == ownerClosing: count = ResourceClosed
     count
 
@@ -168,7 +183,7 @@ template writeAllInto*(owner: UnixConnRef; p: pointer; n: int;
     let held = owner
     let source = p
     let size = n
-    let until: Deadline = deadline
+    let until: Deadline = bounded(held, deadline)
     let token: nil CancelToken = tok
     retain(token)
     defer: release(token)

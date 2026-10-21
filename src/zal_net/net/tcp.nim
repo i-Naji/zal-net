@@ -86,3 +86,5 @@ proc shutdownWrite*(stream: TcpStream) {.raises.} =
 proc port*(server: TcpListener): uint16 {.inline.} = listeners.port(server)
 proc lastReadFailure*(stream: TcpStream): IoFailure {.inline.} = owners.lastReadFailure(stream)
 proc lastWriteFailure*(stream: TcpStream): IoFailure {.inline.} = owners.lastWriteFailure(stream)
+proc deadline*(stream: TcpStream): Deadline {.inline.} = owners.deadline(stream)
+proc renew*(stream: TcpStream; deadline: Deadline) {.inline.} = owners.renew(stream, deadline)

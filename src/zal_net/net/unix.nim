@@ -74,3 +74,5 @@ proc shutdownWrite*(stream: UnixStream) {.raises.} =
 proc path*(server: UnixListener): string {.inline.} = listeners.path(server)
 proc lastReadFailure*(stream: UnixStream): IoFailure {.inline.} = owners.lastReadFailure(stream)
 proc lastWriteFailure*(stream: UnixStream): IoFailure {.inline.} = owners.lastWriteFailure(stream)
+proc deadline*(stream: UnixStream): Deadline {.inline.} = owners.deadline(stream)
+proc renew*(stream: UnixStream; deadline: Deadline) {.inline.} = owners.renew(stream, deadline)

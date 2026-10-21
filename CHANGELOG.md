@@ -24,3 +24,4 @@
 - Notice a rejected kTLS record while a relay reader is parked on the epoll backend.
 - Back off a writer stalled behind a half-closed peer on io_uring instead of retrying every millisecond.
 - Use Nimony `112365da`.
+- Add a standing deadline to TCP and Unix streams (`deadline`, `renew`).

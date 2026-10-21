@@ -17,6 +17,8 @@ writer may coexist; a full write keeps admission across partial sends.
 Close rejects new work, cancels pending waits and drains borrowers before
 releasing the descriptor. A close deadline ends the wait, not cleanup.
 Destructors perform only quiescent, nonblocking cleanup.
+`renew` sets a standing deadline on a TCP or Unix stream; each read and write
+ends at the earlier of it and its own. `never` clears it.
 
 Use retained transports for composition. Unsafe borrowed views cannot close or
 transfer owners. A rejected transfer preserves the source; admitted transfer
