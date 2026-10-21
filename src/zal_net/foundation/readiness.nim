@@ -79,11 +79,12 @@ proc retire*(readiness: Readiness; fd: cint): nil Registration =
 
 proc retireAll*(readiness: Readiness): seq[Registration] =
   result = @[]
-  for fd, registration in readiness.registrations:
+  let registrations = readiness.registrations
+  readiness.registrations.clear()
+  for fd, registration in registrations:
     atomicStore(registration.active, 0, moRelease)
     acknowledge(registration)
     result.add registration
-  readiness.registrations.clear()
 
 proc pop(readiness: Readiness): ReadyEvent =
   result = default(ReadyEvent)
