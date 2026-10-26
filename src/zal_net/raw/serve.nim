@@ -13,7 +13,7 @@ type ContextHandler*[C] = proc (connection: TcpConnRef; context: C) {.nimcall, p
 proc dispatch[C](connection: sink TcpConnRef; context: sink C;
                  handler: ContextHandler[C]) {.passive.} =
   handler(connection, context)
-  discard close(connection)
+  discard retire(connection)
 
 template serve*[C: ref](listener: TcpListenerRef; handler: ContextHandler[C]; ctx: C;
                    streamTimeoutMs = DefaultTimeoutMs; noDelay = true): int =
@@ -33,7 +33,7 @@ template serve*[C: ref](listener: TcpListenerRef; handler: ContextHandler[C]; ct
         code = ResourceClosed
         break
       if not trySpawnTask(dispatch(connection, context, callback)):
-        discard close(connection)
+        discard retire(connection)
         code = ResourceClosed
         break
       burst += 1

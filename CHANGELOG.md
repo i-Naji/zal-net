@@ -25,3 +25,6 @@
 - Back off a writer stalled behind a half-closed peer on io_uring instead of retrying every millisecond.
 - Use Nimony `112365da`.
 - Add a standing deadline to TCP and Unix streams (`deadline`, `renew`).
+- Use Nimony `c923e3c9`: a call now also finds the routines of its argument's module.
+- Owners close with `retire` and half-close with `halfClose`, and datagram owners use `recvDatagram` and `sendDatagram`; `close`, `shutdownWrite`, `recvFrom` and `sendTo` are the raising forms in net/tcp, net/unix and net/udp.
+- net/tcp, net/unix and net/udp re-export the owners' `port`, `path`, `localAddress`, `remoteAddress`, `lastReadFailure`, `lastWriteFailure`, `deadline` and `renew`.

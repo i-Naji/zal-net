@@ -127,7 +127,7 @@ proc startClose(owner: TcpListenerRef): int =
   finishInterrupt(owner.life)
   cleanup(owner)
 
-template close*(owner: TcpListenerRef; deadline: Deadline = never): int =
+template retire*(owner: TcpListenerRef; deadline: Deadline = never): int =
   ## Stop admission, cancel a pending accept, then release its descriptor only
   ## after completion. A deadline leaves safe eventual cleanup with the borrower.
   block:

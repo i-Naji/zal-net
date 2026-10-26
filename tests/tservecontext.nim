@@ -19,13 +19,13 @@ proc echoConn(conn: TcpConnRef; ctx: Context) {.passive.} =
   let got = recvInto(conn, bytes, afterMs(2000))
   assert got == 1 and bytes[0] == 91
   assert sendFrom(conn, bytes.toOpenArray(0, got - 1), afterMs(2000)) == got
-  assert close(ctx.listener) == 0
+  assert retire(ctx.listener) == 0
   setEvent(addr ctx.done)
   # serve's dispatcher closes the connection after this handler returns.
 
 proc burstHandler(conn: TcpConnRef; ctx: Context) {.passive.} =
   let previous = atomicFetchAdd(ctx.count, 1, moAcquireRelease)
-  if previous == 0: assert close(ctx.listener) == 0
+  if previous == 0: assert retire(ctx.listener) == 0
 
 proc runBurstService(ctx: sink Context) {.passive.} =
   let code = serve(ctx.listener, burstHandler, ctx)
@@ -62,7 +62,7 @@ proc main() {.passive.} =
         while state(retained) != ownerClosed and monoNow() < until: yieldNow()
         assert state(retained) == ownerClosed
       else: assert false, "handler received connection"
-      assert close(client) == 0 and close(listener) == 0
+      assert retire(client) == 0 and retire(listener) == 0
     else: assert false, "friendly client construction"
   else: assert false, "friendly listener construction"
   for cycle in 0..<32:
@@ -83,7 +83,7 @@ proc main() {.passive.} =
       var bytes = [91'u8]
       assert sendFrom(client, bytes, afterMs(2000)) == 1
       assert recvInto(client, bytes, afterMs(2000)) == 1 and bytes[0] == 91
-      assert close(client) == 0
+      assert retire(client) == 0
     else: assert false, "queued context connection"
     let until = afterMs(2000)
     while atomicLoad(completed, moAcquire) == previous and monoNow() < until: parkUntil(afterMs(1))
@@ -109,8 +109,8 @@ proc main() {.passive.} =
     assert admitted >= 1 and admitted <= 64, "bounded admission yields to handlers"
     for i in 0..<clients.len:
       let client = clients[i]
-      if client != nil: assert close(client) == 0
-    assert close(burstListener) == 0
+      if client != nil: assert retire(client) == 0
+    assert retire(burstListener) == 0
   else: assert false, "burst service setup"
   echo "PASS contextual serving, retained context and dispatcher-owned connection"
 

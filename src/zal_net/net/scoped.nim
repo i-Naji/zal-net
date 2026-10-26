@@ -6,23 +6,23 @@ import zal_net/foundation/tcp, zal_net/foundation/unix, zal_net/foundation/udp, 
 template withTcp*(owner: TcpConnRef; body: untyped) =
   block:
     let held = owner
-    defer: discard close(held)
+    defer: discard retire(held)
     body
 
 template withUnix*(owner: UnixConnRef; body: untyped) =
   block:
     let held = owner
-    defer: discard close(held)
+    defer: discard retire(held)
     body
 
 template withUdp*(owner: UdpSocketRef; body: untyped) =
   block:
     let held = owner
-    defer: discard close(held)
+    defer: discard retire(held)
     body
 
 template withListener*(owner: TcpListenerRef; body: untyped) =
   block:
     let held = owner
-    defer: discard close(held)
+    defer: discard retire(held)
     body

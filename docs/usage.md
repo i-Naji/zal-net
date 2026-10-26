@@ -49,7 +49,7 @@ Run `NIMONY=build/toolchain/bin/nimony scripts/test-contracts.sh` to check that
 invalid borrows and managed channel payloads are rejected by the compiler.
 
 `retainTransport(owner)` builds a transport from the owner's `recvInto`,
-`sendFrom`, `shutdownWrite`, `interrupt`, `close`, `dispose` and `canTransfer`
+`sendFrom`, `halfClose`, `interrupt`, `retire`, `dispose` and `canTransfer`
 procedures. Read and write accept a pointer, count, deadline and cancellation
 token. Close, dispose and transfer checks return an integer error code.
 The adapter and its retained owner slot share one allocation.

@@ -75,16 +75,12 @@ template write*(stream: TcpStream; buffer: openArray[byte];
     checkIo(outcome.error)
 
 template close*(stream: TcpStream; deadline: Deadline = never) =
-  checkIo(owners.close(stream, deadline))
+  checkIo(owners.retire(stream, deadline))
 
 template close*(server: TcpListener; deadline: Deadline = never) =
-  checkIo(listeners.close(server, deadline))
+  checkIo(listeners.retire(server, deadline))
 
 proc shutdownWrite*(stream: TcpStream) {.raises.} =
-  checkIo(owners.shutdownWrite(stream))
+  checkIo(owners.halfClose(stream))
 
-proc port*(server: TcpListener): uint16 {.inline.} = listeners.port(server)
-proc lastReadFailure*(stream: TcpStream): IoFailure {.inline.} = owners.lastReadFailure(stream)
-proc lastWriteFailure*(stream: TcpStream): IoFailure {.inline.} = owners.lastWriteFailure(stream)
-proc deadline*(stream: TcpStream): Deadline {.inline.} = owners.deadline(stream)
-proc renew*(stream: TcpStream; deadline: Deadline) {.inline.} = owners.renew(stream, deadline)
+export listeners.port, owners.lastReadFailure, owners.lastWriteFailure, owners.deadline, owners.renew

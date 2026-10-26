@@ -143,8 +143,8 @@ proc endOperation(owner: UdpSocketRef; write: bool) =
   endBorrow(owner.life, write)
   cleanup(owner)
 
-template recvFrom*(owner: UdpSocketRef; bytes: var openArray[byte];
-                    source: var SocketAddress; deadline: Deadline = never;
+template recvDatagram*(owner: UdpSocketRef; bytes: var openArray[byte];
+                        source: var SocketAddress; deadline: Deadline = never;
                     tok: nil CancelToken = nil): int =
   block:
     let held = owner
@@ -156,8 +156,8 @@ template recvFrom*(owner: UdpSocketRef; bytes: var openArray[byte];
       if count < 0 and state(held) == ownerClosing: count = ResourceClosed
     count
 
-template sendTo*(owner: UdpSocketRef; bytes: openArray[byte]; to: SocketAddress;
-                  deadline: Deadline = never; tok: nil CancelToken = nil): int =
+template sendDatagram*(owner: UdpSocketRef; bytes: openArray[byte]; to: SocketAddress;
+                        deadline: Deadline = never; tok: nil CancelToken = nil): int =
   block:
     let held = owner
     var count = beginOperation(held, true)
@@ -226,7 +226,7 @@ proc startClose(owner: UdpSocketRef): int =
   finishInterrupt(owner.life)
   cleanup(owner)
 
-template close*(owner: UdpSocketRef; deadline: Deadline = never): int =
+template retire*(owner: UdpSocketRef; deadline: Deadline = never): int =
   ## Reject new work and cancel waits without recycling the descriptor. A
   ## deadline leaves eventual cleanup with the final retaining operation.
   block:
@@ -236,8 +236,8 @@ template close*(owner: UdpSocketRef; deadline: Deadline = never): int =
     code
 
 
-template recvFrom*(owner: UdpSocketRef; bytes: var openArray[byte];
-                    info: var DatagramInfo; deadline: Deadline = never;
+template recvDatagram*(owner: UdpSocketRef; bytes: var openArray[byte];
+                        info: var DatagramInfo; deadline: Deadline = never;
                     tok: nil CancelToken = nil): int =
   block:
     let held = owner

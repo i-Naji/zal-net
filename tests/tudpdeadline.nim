@@ -20,18 +20,18 @@ proc exercise(receiver, sender, unconnected: UdpSocketRef) {.passive.} =
   info.ttl = 771
   assert send(sender, [1'u8], expired) == IoTimedOut
   assert send(sender, empty, expired) == IoTimedOut
-  assert sendTo(unconnected, [2'u8], target, expired) == IoTimedOut
+  assert sendDatagram(unconnected, [2'u8], target, expired) == IoTimedOut
   assert sendWithSource(unconnected, [3'u8], target, loopback4(), deadline=expired) == IoTimedOut
   # None of the expired sends may leave a packet behind.
-  assert recvFrom(receiver, buffer, source, afterMs(20)) == IoTimedOut
+  assert recvDatagram(receiver, buffer, source, afterMs(20)) == IoTimedOut
   assert send(sender, [42'u8], afterMs(2000)) == 1
-  assert recvFrom(receiver, buffer, source, expired) == IoTimedOut
-  assert recvFrom(receiver, empty, source, expired) == IoTimedOut
-  assert recvFrom(receiver, buffer, info, expired) == IoTimedOut
+  assert recvDatagram(receiver, buffer, source, expired) == IoTimedOut
+  assert recvDatagram(receiver, empty, source, expired) == IoTimedOut
+  assert recvDatagram(receiver, buffer, info, expired) == IoTimedOut
   assert buffer[0] == 99 and source.port == 0 and info.ttl == 771
-  assert recvFrom(receiver, buffer, source, afterMs(2000)) == 1
+  assert recvDatagram(receiver, buffer, source, afterMs(2000)) == 1
   assert buffer[0] == 42
-  assert sendTo(receiver, [43'u8], peer, afterMs(2000)) == 1
+  assert sendDatagram(receiver, [43'u8], peer, afterMs(2000)) == 1
   assert recv(sender, buffer, expired) == IoTimedOut
   assert recv(sender, empty, expired) == IoTimedOut
   assert recv(sender, buffer, afterMs(2000)) == 1 and buffer[0] == 43
@@ -44,7 +44,7 @@ proc exercise(receiver, sender, unconnected: UdpSocketRef) {.passive.} =
   outgoing.slots[0].buf[0] = 44
   setOutgoing(outgoing, 0, 1, target.raw)
   assert sendBatch(unconnected, outgoing, 1, expired).error == IoTimedOut
-  assert recvFrom(receiver, buffer, source, afterMs(20)) == IoTimedOut
+  assert recvDatagram(receiver, buffer, source, afterMs(20)) == IoTimedOut
   let sent = sendBatch(unconnected, outgoing, 1, afterMs(2000))
   assert sent.sent == 1 and sent.error == 0
   assert recvBatch(receiver, incoming, expired) == IoTimedOut
@@ -57,7 +57,7 @@ proc exercise(receiver, sender, unconnected: UdpSocketRef) {.passive.} =
   assert trySpawnTask(observer())
   for i in 0..<1024:
     assert send(sender, [45'u8], afterMs(2000)) == 1
-    assert recvFrom(receiver, buffer, source, afterMs(2000)) == 1
+    assert recvDatagram(receiver, buffer, source, afterMs(2000)) == 1
   assert isSet(addr observerDone), "ready UDP traffic lets another task run"
   clearEvent(addr observerDone)
   assert trySpawnTask(observer())
@@ -72,7 +72,7 @@ proc main() {.passive.} =
   let receiver = r.value
   assert receiver != nil
   if receiver != nil:
-    defer: discard close(receiver)
+    defer: discard retire(receiver)
     let s = connectUdpRef(localAddress(receiver))
     let u = bindUdpRef(0, "127.0.0.1")
     let sender = s.value
@@ -80,8 +80,8 @@ proc main() {.passive.} =
     assert sender != nil and unconnected != nil
     if sender != nil and unconnected != nil:
       defer:
-        discard close(sender)
-        discard close(unconnected)
+        discard retire(sender)
+        discard retire(unconnected)
       exercise(receiver, sender, unconnected)
   echo "PASS UDP deadlines preserve queued packets and ready-I/O fairness"
 

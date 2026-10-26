@@ -149,7 +149,7 @@ proc endBorrow(conn: TcpConnRef; write: bool) =
   endBorrow(conn.life, write)
   cleanup(conn)
 
-proc shutdownWrite*(conn: TcpConnRef): int =
+proc halfClose*(conn: TcpConnRef): int =
   result = beginBorrow(conn.life, true)
   if result != 0: return
   shutdownWrite(addr conn.stream)
@@ -219,7 +219,7 @@ proc takeRawTcp*(conn: TcpConnRef; output: var TcpStream): int =
   result = 0
 
 
-template close*(conn: TcpConnRef; deadline: Deadline = never): int =
+template retire*(conn: TcpConnRef; deadline: Deadline = never): int =
   ## Reject new work, interrupt borrowers, and wait for their actual completion.
   ## A deadline returns IoTimedOut while the owner remains closing; the final
   ## borrower still closes its socket. Repeated close joins the same cleanup.

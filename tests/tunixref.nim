@@ -64,15 +64,15 @@ proc main() {.passive.} =
     assert trySpawnTask(readPending(conn))
     assert wait(addr entered, afterMs(2000)) == wrReady
     assert recvInto(conn, bytes) == ResourceBusy, "pending read holds Unix admission"
-    let firstClose = close(conn, afterMs(0))
+    let firstClose = retire(conn, afterMs(0))
     assert firstClose == 0 or firstClose == IoTimedOut
     assert state(conn) != ownerOpen, "deadline cannot reopen an owner"
     assert sendFrom(conn, bytes) == ResourceClosed
-    assert close(conn, afterMs(2000)) == 0, "Unix close drains pending I/O"
+    assert retire(conn, afterMs(2000)) == 0, "Unix close drains pending I/O"
     assert wait(addr finished, afterMs(2000)) == wrReady
     assert readCode == ResourceClosed, "closing cancels the Unix reader"
     assert state(conn) == ownerClosed and nativeHandle(conn) == -1
-    assert close(conn) == 0
+    assert retire(conn) == 0
   else:
     assert false, "owner construction"
   close(addr peer)

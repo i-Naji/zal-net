@@ -27,7 +27,7 @@ proc main() {.passive.} =
       else:
         earlyTcp(client)
         assert state(client) == ownerClosed
-        assert close(server) == 0
+        assert retire(server) == 0
     assert state(listener) == ownerClosed
   let bound = bindUdpRef(0, "127.0.0.1")
   let socket = bound.value

@@ -63,16 +63,12 @@ template write*(stream: UnixStream; buffer: openArray[byte];
     checkIo(outcome.error)
 
 template close*(stream: UnixStream; deadline: Deadline = never) =
-  checkIo(owners.close(stream, deadline))
+  checkIo(owners.retire(stream, deadline))
 
 template close*(server: UnixListener; deadline: Deadline = never) =
-  checkIo(listeners.close(server, deadline))
+  checkIo(listeners.retire(server, deadline))
 
 proc shutdownWrite*(stream: UnixStream) {.raises.} =
-  checkIo(owners.shutdownWrite(stream))
+  checkIo(owners.halfClose(stream))
 
-proc path*(server: UnixListener): string {.inline.} = listeners.path(server)
-proc lastReadFailure*(stream: UnixStream): IoFailure {.inline.} = owners.lastReadFailure(stream)
-proc lastWriteFailure*(stream: UnixStream): IoFailure {.inline.} = owners.lastWriteFailure(stream)
-proc deadline*(stream: UnixStream): Deadline {.inline.} = owners.deadline(stream)
-proc renew*(stream: UnixStream; deadline: Deadline) {.inline.} = owners.renew(stream, deadline)
+export listeners.path, owners.lastReadFailure, owners.lastWriteFailure, owners.deadline, owners.renew

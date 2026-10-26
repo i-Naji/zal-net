@@ -54,13 +54,13 @@ template connectUdp*(host: string; port: uint16; deadline: Deadline = never;
 # passive child wrappers or per-buffer specialization are needed.
 template receiveRaw(socket: UdpSocket; bytes: var openArray[byte]; source: var SocketAddress;
                     until: Deadline; token: nil CancelToken): int =
-  owners.recvFrom(socket, bytes, source, until, token)
+  owners.recvDatagram(socket, bytes, source, until, token)
 template receiveRaw(socket: UdpSocket; bytes: var openArray[byte]; info: var DatagramInfo;
                     until: Deadline; token: nil CancelToken): int =
-  owners.recvFrom(socket, bytes, info, until, token)
+  owners.recvDatagram(socket, bytes, info, until, token)
 template sendRaw(socket: UdpSocket; bytes: openArray[byte]; to: SocketAddress;
                  until: Deadline; token: nil CancelToken): int =
-  owners.sendTo(socket, bytes, to, until, token)
+  owners.sendDatagram(socket, bytes, to, until, token)
 template readRaw(socket: UdpSocket; bytes: var openArray[byte];
                  until: Deadline; token: nil CancelToken): int =
   owners.recv(socket, bytes, until, token)
@@ -132,9 +132,6 @@ template write*(socket: UdpSocket; buffer: typed;
     checkIo(code)
 
 template close*(socket: UdpSocket; deadline: Deadline = never) =
-  checkIo(owners.close(socket, deadline))
+  checkIo(owners.retire(socket, deadline))
 
-proc localAddress*(socket: UdpSocket): SocketAddress = owners.localAddress(socket)
-proc remoteAddress*(socket: UdpSocket): SocketAddress = owners.remoteAddress(socket)
-proc lastReadFailure*(socket: UdpSocket): IoFailure {.inline.} = owners.lastReadFailure(socket)
-proc lastWriteFailure*(socket: UdpSocket): IoFailure {.inline.} = owners.lastWriteFailure(socket)
+export owners.localAddress, owners.remoteAddress, owners.lastReadFailure, owners.lastWriteFailure

@@ -17,7 +17,7 @@ var retainedSource = default(SocketAddress)
 proc pending(owner: sink UdpSocketRef; tok: nil CancelToken = nil) {.passive.} =
   var bytes = default(array[8, byte])
   setEvent(addr entered)
-  readCode = recvFrom(owner, bytes, retainedSource, afterMs(2000), tok)
+  readCode = recvDatagram(owner, bytes, retainedSource, afterMs(2000), tok)
   setEvent(addr finished)
 
 proc pendingBatch(owner: sink UdpSocketRef) {.passive.} =
@@ -77,19 +77,19 @@ proc main() {.passive.} =
       var empty = default(array[0, byte])
       var source = default(SocketAddress)
       assert send(sender, empty, afterMs(2000)) == 0, "UDPRef check 65"
-      assert recvFrom(receiver, empty, source, afterMs(2000)) == 0, "UDPRef check 66"
+      assert recvDatagram(receiver, empty, source, afterMs(2000)) == 0, "UDPRef check 66"
       assert source.port == localAddress(sender).port, "UDPRef check 67"
       # One zero-length receive consumes and discards one nonempty datagram.
       assert send(sender, bytes, afterMs(2000)) == 1, "UDPRef check 69"
-      assert recvFrom(receiver, empty, source, afterMs(2000)) == 0, "UDPRef check 70"
-      assert recvFrom(receiver, bytes, source, afterMs(10)) == IoTimedOut, "UDPRef check 71"
+      assert recvDatagram(receiver, empty, source, afterMs(2000)) == 0, "UDPRef check 70"
+      assert recvDatagram(receiver, bytes, source, afterMs(10)) == IoTimedOut, "UDPRef check 71"
       when not defined(release):
         let allocationBaseline = cancelTokenAllocations()
       for cycle in 0..<128:
         let tokens = liveCancelTokens()
         assert send(sender, bytes, afterMs(2000)) == 1, "UDPRef check 74"
-        assert recvFrom(receiver, bytes, source, afterMs(2000)) == 1 and bytes[0] == 79, "UDPRef check 75"
-        assert sendTo(receiver, bytes, source, afterMs(2000)) == 1, "UDPRef check 76"
+        assert recvDatagram(receiver, bytes, source, afterMs(2000)) == 1 and bytes[0] == 79, "UDPRef check 75"
+        assert sendDatagram(receiver, bytes, source, afterMs(2000)) == 1, "UDPRef check 76"
         assert recv(sender, bytes, afterMs(2000)) == 1 and bytes[0] == 79, "UDPRef check 77"
         assert liveCancelTokens() == tokens, "no per-datagram token allocation"
       when not defined(release):
@@ -142,7 +142,7 @@ proc main() {.passive.} =
         assert recvBatch(receiver, incoming, afterMs(20)) == IoTimedOut, "retry sends no duplicates"
         freeBatch(outgoing)
         freeBatch(incoming)
-        assert close(batchSender) == 0
+        assert retire(batchSender) == 0
       else: assert false, "batch sender construction"
       let caller = newCancelToken()
       clearEvent(addr entered)
@@ -150,9 +150,9 @@ proc main() {.passive.} =
       retainedSource = initSocketAddress(loopback4(), 9911)
       assert trySpawnTask(pending(receiver, caller)), "UDPRef check 83"
       assert wait(addr entered, afterMs(2000)) == wrReady, "UDPRef check 84"
-      assert recvFrom(receiver, bytes, source) == ResourceBusy, "UDPRef check 85"
+      assert recvDatagram(receiver, bytes, source) == ResourceBusy, "UDPRef check 85"
       # Opposite directions remain independently admitted while read waits.
-      assert sendTo(receiver, bytes, localAddress(sender), afterMs(2000)) == 1, "UDPRef check 87"
+      assert sendDatagram(receiver, bytes, localAddress(sender), afterMs(2000)) == 1, "UDPRef check 87"
       assert recv(sender, bytes, afterMs(2000)) == 1, "UDPRef check 88"
       cancel(caller)
       assert wait(addr finished, afterMs(2000)) == wrReady, "UDPRef check 90"
@@ -160,35 +160,35 @@ proc main() {.passive.} =
       assert state(receiver) == ownerOpen and nativeHandle(receiver) == fd, "UDPRef check 92"
       release(caller)
       assert send(sender, bytes, afterMs(2000)) == 1, "UDPRef check 94"
-      assert recvFrom(receiver, bytes, source, afterMs(2000)) == 1, "UDPRef check 95"
+      assert recvDatagram(receiver, bytes, source, afterMs(2000)) == 1, "UDPRef check 95"
       clearEvent(addr entered)
       clearEvent(addr finished)
       assert trySpawnTask(pendingBatch(receiver)), "UDPRef check 99"
       assert wait(addr entered, afterMs(2000)) == wrReady, "UDPRef check 100"
-      let closed = close(receiver, afterMs(0))
+      let closed = retire(receiver, afterMs(0))
       assert closed == 0 or closed == IoTimedOut
       assert state(receiver) != ownerOpen
-      assert recvFrom(receiver, bytes, source) == ResourceClosed, "UDPRef check 103"
-      assert sendTo(receiver, bytes, source) == ResourceClosed, "UDPRef check 104"
-      assert close(receiver, afterMs(2000)) == 0, "UDPRef check 105"
+      assert recvDatagram(receiver, bytes, source) == ResourceClosed, "UDPRef check 103"
+      assert sendDatagram(receiver, bytes, source) == ResourceClosed, "UDPRef check 104"
+      assert retire(receiver, afterMs(2000)) == 0, "UDPRef check 105"
       assert wait(addr finished, afterMs(2000)) == wrReady, "UDPRef check 106"
       assert readCode == ResourceClosed and state(receiver) == ownerClosed, "UDPRef check 107"
-      assert nativeHandle(receiver) == -1 and close(receiver) == 0, "UDPRef check 108"
+      assert nativeHandle(receiver) == -1 and retire(receiver) == 0, "UDPRef check 108"
       # The freed slot is reused. Repeated close cannot touch the replacement.
       var replacement = bindUdp(0, "127.0.0.1")
       assert replacement.ok, "UDPRef check 111"
       echo "UDP replacement descriptor reused: ", nativeHandle(replacement) == fd
-      assert close(receiver) == 0, "UDPRef check 113"
+      assert retire(receiver) == 0, "UDPRef check 113"
       let destination = localAddress(replacement)
       let opened = openUdpRef(timeoutMs=0)
       let probe = opened.value
       if probe != nil:
-        assert sendTo(probe, bytes, destination, afterMs(2000)) == 1, "replacement send from unconnected socket"
+        assert sendDatagram(probe, bytes, destination, afterMs(2000)) == 1, "replacement send from unconnected socket"
         assert recvFrom(replacement, bytes, source, afterMs(2000)) == 1, "replacement receive"
-        assert close(probe) == 0
+        assert retire(probe) == 0
       else: assert false, "replacement probe"
       close(replacement)
-      assert close(sender) == 0 and close(sender) == 0, "UDPRef check 118"
+      assert retire(sender) == 0 and retire(sender) == 0, "UDPRef check 118"
     else: assert false, "friendly UDP association"
   else: assert false, "friendly UDP transfer"
   # Scope exit leaves a queued task as the sole Ref owner across its read park.
@@ -214,7 +214,7 @@ proc main() {.passive.} =
   let resolved = connectUdpRef(hostName(), 1234, deadline=afterMs(2000))
   assert resolved.code == 0 and hostEvaluations == 1
   let namedOwner = resolved.value
-  if namedOwner != nil: assert close(namedOwner) == 0
+  if namedOwner != nil: assert retire(namedOwner) == 0
   else: assert false, "hostname UDP association"
   let constructorStop = newCancelToken()
   cancel(constructorStop)

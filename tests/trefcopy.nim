@@ -12,7 +12,7 @@ type State = object
 proc pump(source, destination: sink TcpConnRef; tok: nil CancelToken;
           state: ptr State) {.passive.} =
   state.outcome = copy(source, destination, splice = false, tok = tok)
-  discard shutdownWrite(destination)
+  discard halfClose(destination)
   setEvent(addr state.done)
 proc takeOwner(fd: var cint): nil TcpConnRef =
   var raw = default(TcpStream)
@@ -70,12 +70,12 @@ proc main() {.passive.} =
       assert recvInto(reading, byteBuffer) == ResourceBusy
       assert sendFrom(writing, byteBuffer) == ResourceBusy
       if closeSource:
-        assert close(reading, afterMs(2000)) == 0, "source close drains a quiet copy"
+        assert retire(reading, afterMs(2000)) == 0, "source close drains a quiet copy"
       else:
-        assert close(writing, afterMs(2000)) == 0, "destination close drains a quiet copy"
+        assert retire(writing, afterMs(2000)) == 0, "destination close drains a quiet copy"
       assert wait(addr closing.done, afterMs(2000)) == wrReady
       assert closing.outcome.error == ResourceClosed
-      assert close(reading) == 0 and close(writing) == 0
+      assert retire(reading) == 0 and retire(writing) == 0
     else:
       quit "owner construction failed"
     closeFd(quietWriter)

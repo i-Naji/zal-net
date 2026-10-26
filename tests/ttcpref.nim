@@ -33,11 +33,11 @@ proc main() {.passive.} =
     var bytes = default(array[8, byte])
     assert recvInto(conn, bytes) == ResourceBusy, "friendly owner check 38"
     parkUntil(afterMs(30)) # Let the read park before closing its owner.
-    assert close(conn, afterMs(2000)) == 0, "friendly owner check 39"
+    assert retire(conn, afterMs(2000)) == 0, "friendly owner check 39"
     assert wait(addr finished, afterMs(2000)) == wrReady, "friendly owner check 40"
     assert readCode == ResourceClosed, "friendly owner check 41"
     assert state(conn) == ownerClosed and nativeHandle(conn) == -1, "friendly owner check 42"
-    assert close(conn) == 0, "friendly owner check 43"
+    assert retire(conn) == 0, "friendly owner check 43"
     assert recvInto(conn, bytes) == ResourceClosed, "friendly owner check 44"
     assert sendFrom(conn, bytes) == ResourceClosed, "friendly owner check 45"
   else:

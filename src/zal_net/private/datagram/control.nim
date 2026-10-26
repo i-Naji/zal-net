@@ -2,8 +2,8 @@
 proc unbind(l: ptr Listener) =
   let old = l.kind
   if old != nil:
-    let unbind = old.unbindListener
-    if unbind != nil: unbind(l)
+    let hook = old.unbindListener
+    if hook != nil: hook(l)
 
 proc setListenerCodec*(e: ptr DatagramEngine; slot: int; codec: nil ptr ListenerCodec;
                        settings: nil pointer; tagId: int32; label: int) =

@@ -23,8 +23,8 @@ proc main() {.passive.} =
     let repeated = takeUnixListenerRef(listener)
     assert repeated.code == ResourceClosed and repeated.value == nil
     assert nativeHandle(owner) == descriptor and owner.path == path
-    assert close(owner, afterMs(2000)) == 0
-    assert close(owner) == 0
+    assert retire(owner, afterMs(2000)) == 0
+    assert retire(owner) == 0
     var file: File
     assert not open(file, path)
   var remaining = listenUnix(path)

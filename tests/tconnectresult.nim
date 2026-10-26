@@ -95,7 +95,7 @@ proc main() {.passive.} =
     assert remote.isOpen, "accept friendly TCP peer"
     assert sendFrom(candidate, bytes, afterMs(2000)) == 1, "friendly TCP send"
     assert recvInto(addr remote, bytes, afterMs(2000)) == 1, "friendly TCP peer receive"
-    assert close(candidate) == 0, "friendly TCP close"
+    assert retire(candidate) == 0, "friendly TCP close"
     close(addr remote)
   else:
     assert false, "friendly TCP constructor"
@@ -141,7 +141,7 @@ proc main() {.passive.} =
     assert remote.isOpen, "accept friendly Unix peer"
     assert sendFrom(localConn, bytes, afterMs(2000)) == 1, "friendly Unix send"
     assert recvInto(addr remote, bytes, afterMs(2000)) == 1, "friendly Unix peer receive"
-    assert close(localConn) == 0, "friendly Unix close"
+    assert retire(localConn) == 0, "friendly Unix close"
     close(addr remote)
   else: assert false, "friendly Unix constructor"
   closeNow(localListener)

@@ -12,7 +12,7 @@ var retainedInfo: DatagramInfo
 proc pending(owner: sink UdpSocketRef; tok: nil CancelToken = nil) {.passive.} =
   var bytes = default(array[8, byte])
   setEvent(addr entered)
-  resultCode = recvFrom(owner, bytes, retainedInfo, afterMs(2000), tok)
+  resultCode = recvDatagram(owner, bytes, retainedInfo, afterMs(2000), tok)
   setEvent(addr finished)
 
 proc main() {.passive.} =
@@ -35,33 +35,33 @@ proc main() {.passive.} =
     when not defined(release):
       let calls = cancelTokenAllocations()
     for iteration in 0..<128:
-      assert sendTo(sender, message, target, afterMs(2000)) == 3
-      assert recvFrom(receiver, bytes, info, afterMs(2000)) == 3
+      assert sendDatagram(sender, message, target, afterMs(2000)) == 3
+      assert recvDatagram(receiver, bytes, info, afterMs(2000)) == 3
       assert bytes[0] == 7 and bytes[2] == 9
       assert info.source.port == localAddress(sender).port
       assert info.hasDestination and info.destination == loopback4()
       assert info.interfaceIndex > 0 and info.ttl > 0 and not info.truncated
       assert sendWithSource(receiver, message, info.source, info.destination,
                             deadline=afterMs(2000)) == 3
-      assert recvFrom(sender, bytes, source, afterMs(2000)) == 3
+      assert recvDatagram(sender, bytes, source, afterMs(2000)) == 3
       assert ip(source) == loopback4() and source.port == target.port
     when not defined(release):
       assert cancelTokenAllocations() == calls, "metadata operations allocate no child tokens"
     var small = default(array[1, byte])
-    assert sendTo(sender, message, target, afterMs(2000)) == 3
-    assert recvFrom(receiver, small, info, afterMs(2000)) == 1 and info.truncated
+    assert sendDatagram(sender, message, target, afterMs(2000)) == 3
+    assert recvDatagram(receiver, small, info, afterMs(2000)) == 1 and info.truncated
     var empty = default(array[0, byte])
     assert sendWithSource(sender, empty, target, loopback4(), deadline=afterMs(2000)) == 0
-    assert recvFrom(receiver, empty, info, afterMs(2000)) == 0 and not info.truncated
-    assert sendTo(sender, message, target, afterMs(2000)) == 3
-    assert recvFrom(receiver, empty, info, afterMs(2000)) == 0 and info.truncated
-    assert recvFrom(receiver, bytes, info, afterMs(10)) == IoTimedOut
+    assert recvDatagram(receiver, empty, info, afterMs(2000)) == 0 and not info.truncated
+    assert sendDatagram(sender, message, target, afterMs(2000)) == 3
+    assert recvDatagram(receiver, empty, info, afterMs(2000)) == 0 and info.truncated
+    assert recvDatagram(receiver, bytes, info, afterMs(10)) == IoTimedOut
     let tok = newCancelToken()
     retainedInfo.ttl = 771
     assert trySpawnTask(pending(receiver, tok))
     assert wait(addr entered, afterMs(2000)) == wrReady
     assert not enableInfo(receiver), "settings reject a pending borrower"
-    assert recvFrom(receiver, bytes, info) == ResourceBusy
+    assert recvDatagram(receiver, bytes, info) == ResourceBusy
     cancel(tok)
     assert wait(addr finished, afterMs(2000)) == wrReady and resultCode == ECancelled
     assert retainedInfo.ttl == 771, "failed receive preserves metadata"
@@ -70,14 +70,14 @@ proc main() {.passive.} =
     clearEvent(addr finished)
     assert trySpawnTask(pending(receiver))
     assert wait(addr entered, afterMs(2000)) == wrReady
-    let closed = close(receiver, afterMs(0))
+    let closed = retire(receiver, afterMs(0))
     assert closed == 0 or closed == IoTimedOut
     assert not enableInfo(receiver) and not setBroadcast(receiver)
-    assert close(receiver, afterMs(2000)) == 0
+    assert retire(receiver, afterMs(2000)) == 0
     assert wait(addr finished, afterMs(2000)) == wrReady and resultCode == ResourceClosed
-    assert recvFrom(receiver, bytes, info) == ResourceClosed
+    assert recvDatagram(receiver, bytes, info) == ResourceClosed
     assert sendWithSource(receiver, message, target, loopback4()) == ResourceClosed
-    assert close(sender) == 0
+    assert retire(sender) == 0
   echo "PASS friendly UDP metadata, selected source, truncation, cancellation and close drain"
   assert liveCancelTokens() == baseline
 

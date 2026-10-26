@@ -13,7 +13,7 @@ proc pending(owner: sink TcpListenerRef; tok: nil CancelToken = nil) {.passive.}
   let got = acceptConn(owner, deadline=afterMs(2000), tok=tok)
   acceptCode = got.code
   let peer = got.value
-  if peer != nil: discard close(peer)
+  if peer != nil: discard retire(peer)
   setEvent(addr finished)
 
 proc cancelLater(tok: CancelToken) {.passive.} =
@@ -93,26 +93,26 @@ proc main() {.passive.} =
     if peer != nil:
       assert sendFrom(addr sender, bytes, afterMs(2000)) == 1
       assert recvInto(peer, bytes, afterMs(2000)) == 1 and bytes[0] == 43
-      assert close(peer) == 0
+      assert retire(peer) == 0
     else: assert false, "accepted connection owner"
     close(addr sender)
     clearEvent(addr entered)
     clearEvent(addr finished)
     assert trySpawnTask(pending(held))
     assert wait(addr entered, afterMs(2000)) == wrReady
-    let closed = close(held, afterMs(0))
+    let closed = retire(held, afterMs(0))
     assert closed == 0 or closed == IoTimedOut
     assert state(held) != ownerOpen
     let rejected = acceptConn(held)
     assert rejected.code == ResourceClosed and rejected.value == nil
-    assert close(held, afterMs(2000)) == 0
+    assert retire(held, afterMs(2000)) == 0
     assert wait(addr finished, afterMs(2000)) == wrReady
     assert acceptCode == ResourceClosed and state(held) == ownerClosed
-    assert nativeHandle(held) == -1 and close(held) == 0
+    assert nativeHandle(held) == -1 and retire(held) == 0
     var replacement = listenTcp(0, "127.0.0.1")
     assert replacement.ok
     let replacementFd = nativeHandle(replacement)
-    assert close(held) == 0
+    assert retire(held) == 0
     assert replacement.ok and nativeHandle(replacement) == replacementFd
     var probe = connect("127.0.0.1", replacement.port, deadline=afterMs(2000))
     assert probe.isOpen

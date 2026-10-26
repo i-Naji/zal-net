@@ -158,13 +158,13 @@ proc startClose(conn: UnixConnRef): int =
   finishInterrupt(conn.life)
   cleanup(conn)
 
-proc shutdownWrite*(conn: UnixConnRef): int =
+proc halfClose*(conn: UnixConnRef): int =
   result = beginBorrow(conn.life, true)
   if result != 0: return
   shutdownWrite(addr conn.stream)
   endBorrow(conn, true)
 
-template close*(conn: UnixConnRef; deadline: Deadline = never): int =
+template retire*(conn: UnixConnRef; deadline: Deadline = never): int =
   ## Reject new work, interrupt borrowers, and wait for their actual completion.
   ## A deadline returns IoTimedOut while the owner remains closing; the final
   ## borrower still closes its socket. Repeated close joins the same cleanup.
