@@ -1,6 +1,6 @@
 import std/[assertions, syncio, algorithm]
 import zal_net/rt, zal_net/rt/sync
-import zal_net/net/tcp as nettcp
+import zal_net/net/tcp as tcp
 when defined(benchTls):
   import zal_tls as tls
   type
@@ -10,7 +10,7 @@ when defined(benchTls):
   const Protocol = "tls"
 else:
   type
-    Connection = nettcp.TcpStream
+    Connection = tcp.TcpStream
     ClientSetup = bool
     ServerSetup = bool
   const Protocol = "tcp"
@@ -43,12 +43,12 @@ proc echoPeer(stream: sink Connection; peer: sink Peer) {.passive.} =
   except ErrorCode as error: peer.error = error
   setEvent(addr peer.done)
 
-proc acceptPeers(listener: sink nettcp.TcpListener; setup: ServerSetup;
+proc acceptPeers(listener: sink tcp.TcpListener; setup: ServerSetup;
                  peers: sink seq[Peer]; accepted: sink Peer) {.passive.} =
   try:
     for peer in peers:
       when defined(benchTls):
-        var socket: nil nettcp.TcpStream = listener.accept(deadline=afterMs(30000))
+        var socket: nil tcp.TcpStream = listener.accept(deadline=afterMs(30000))
         let stream = tls.wrapOwned(setup, socket, deadline=afterMs(30000))
       else:
         let stream = listener.accept(deadline=afterMs(30000))
@@ -62,7 +62,7 @@ proc exchange(port: uint16; setup: ClientSetup; client: sink Client) {.passive.}
       let stream = tls.connect(setup, "127.0.0.1", port,
                                serverName="test.example", deadline=afterMs(30000))
     else:
-      let stream = nettcp.connect("127.0.0.1", port, deadline=afterMs(30000))
+      let stream = tcp.connect("127.0.0.1", port, deadline=afterMs(30000))
     defer: stream.close()
     var payload = newSeq[byte](Size)
     var reply = newSeq[byte](Size)
@@ -98,7 +98,7 @@ proc main() {.passive.} =
     else:
       let clientSetup = false
       let serverSetup = false
-    let listener = nettcp.listen(0, "127.0.0.1")
+    let listener = tcp.listen(0, "127.0.0.1")
     defer: listener.close()
     var peers: seq[Peer] = @[]
     var clients: seq[Client] = @[]
