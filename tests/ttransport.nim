@@ -17,6 +17,7 @@ type MemoryObj = object
   done: Event
 type Memory = ref MemoryObj
 proc `=destroy`(memory: var MemoryObj) = inc destroyed
+proc `=wasMoved`(memory: var MemoryObj) {.nodestroy, inline.} = discard
 
 proc readMemory(ctx: pointer; p: pointer; n: int; until: Deadline;
                 tok: nil CancelToken): int {.passive.} =

@@ -13,6 +13,7 @@ proc `=destroy`(probe: var Probe) =
   if probe.live:
     probe.live = false
     discard atomicFetchAdd(dropped, 1, moRelease)
+proc `=wasMoved`(probe: var Probe) {.nodestroy, inline.} = probe.live = false
 proc child(owner: Owner) {.passive.} =
   parkUntil(afterMs(20))
   assert atomicLoad(dropped, moAcquire) == 0

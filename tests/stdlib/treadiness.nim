@@ -17,6 +17,7 @@ type OwnerData = object
 proc `=destroy`(owner: var OwnerData) =
   assert owner.marker == 73
   discard atomicFetchAdd(destroyedCaptures, 1, moRelease)
+proc `=wasMoved`(owner: var OwnerData) {.nodestroy, inline.} = discard
 type Owner = ref OwnerData
 
 template waitReadable(fd: cint; deadline: Deadline; answer: var int) =

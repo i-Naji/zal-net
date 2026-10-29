@@ -10,6 +10,7 @@ type PayloadObj = object
   number: int
 proc `=destroy`(payload: var PayloadObj) =
   discard atomicFetchAdd(destroyed, 1, moRelease)
+proc `=wasMoved`(payload: var PayloadObj) {.nodestroy, inline.} = discard
 type Payload = ref PayloadObj
 
 proc child(payload: sink Payload) {.passive.} =

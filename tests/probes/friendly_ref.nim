@@ -12,6 +12,7 @@ proc `=destroy`(owner: var Owner) =
   if owner.value == 0: return
   assert owner.value == 73
   destroyed = destroyed + 1
+proc `=wasMoved`(owner: var Owner) {.nodestroy, inline.} = owner.value = 0
 
 var entered = default(Event)
 var resume = default(Event)

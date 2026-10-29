@@ -10,6 +10,7 @@ type OwnerObj = object
   value: int
 type Owner = ref OwnerObj
 proc `=destroy`(value: var OwnerObj) = inc destroyed
+proc `=wasMoved`(value: var OwnerObj) {.nodestroy, inline.} = discard
 proc read(ctx: pointer; p: pointer; n: int; d: Deadline; tok: nil CancelToken): int {.passive.} = 0
 proc write(ctx: pointer; p: pointer; n: int; d: Deadline; tok: nil CancelToken): int {.passive.} = n
 proc control(ctx: pointer) = discard

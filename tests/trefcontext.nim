@@ -11,6 +11,7 @@ type Owner = ref OwnerObj
 type View = object
   context: pointer
 proc `=destroy`(owner: var OwnerObj) = inc destroyed
+proc `=wasMoved`(owner: var OwnerObj) {.nodestroy, inline.} = discard
 
 proc context(owner: Owner): pointer =
   when defined(nnUnsafeContextRepro):

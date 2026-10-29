@@ -14,6 +14,7 @@ proc `=destroy`(state: var OwnerState) =
   if state.live:
     state.live = false
     discard atomicFetchAdd(dropped, 1, moRelease)
+proc `=wasMoved`(state: var OwnerState) {.nodestroy, inline.} = state.live = false
 
 proc observer() {.passive.} =
   atomicStore(observed, 1, moRelease)
