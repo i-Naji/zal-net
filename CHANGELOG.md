@@ -29,3 +29,4 @@
 - Owners close with `retire` and half-close with `halfClose`, and datagram owners use `recvDatagram` and `sendDatagram`; `close`, `shutdownWrite`, `recvFrom` and `sendTo` are the raising forms in net/tcp, net/unix and net/udp.
 - net/tcp, net/unix and net/udp re-export the owners' `port`, `path`, `localAddress`, `remoteAddress`, `lastReadFailure`, `lastWriteFailure`, `deadline` and `renew`.
 - Use Nimony `0da5a6b7`: a type with a written `=destroy` also defines `=wasMoved`.
+- `IoTimedOut` comes from std/ioring; docs/usage.md describes the pool's `-d:trampolineSteps` trade-off.
