@@ -40,8 +40,12 @@ proc finish(lease: var LeaseState) =
   gate.lock.release()
 
 proc `=destroy`(lease: var LeaseState) =
-  finish(lease)
-  `=destroy`(lease.gate)
+  if lease.gate != nil:
+    finish(lease)
+    `=destroy`(lease.gate)
+
+proc `=wasMoved`(lease: var LeaseState) {.nodestroy, inline.} =
+  zeroMem(addr lease, sizeof(lease))
 
 proc newResourceGate*(): ResourceGate = ResourceGate(phase: resourceOpen)
 

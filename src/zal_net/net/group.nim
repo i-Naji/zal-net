@@ -25,7 +25,10 @@ proc `=destroy`(group: var GroupObj) =
     cancel(scope)
     release(scope)
 
+proc `=wasMoved`(group: var GroupObj) {.nodestroy, inline.} = group.scope = nil
+
 proc `=destroy`(handle: var TaskObj) = release(handle.task)
+proc `=wasMoved`(handle: var TaskObj) {.nodestroy, inline.} = handle.task = nil
 
 proc newGroup*(): Group =
   result = Group()

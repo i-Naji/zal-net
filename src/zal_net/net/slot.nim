@@ -16,6 +16,9 @@ proc `=destroy`[T](slot: var SlotObj[T]) =
     abandon(slot.result)
     release(slot.result)
 
+proc `=wasMoved`[T](slot: var SlotObj[T]) {.nodestroy, inline.} =
+  zeroMem(addr slot, sizeof(slot))
+
 proc newSlot*[T](): Slot[T] =
   requirePlainData(T)
   result = Slot[T]()
