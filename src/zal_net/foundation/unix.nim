@@ -32,6 +32,9 @@ proc `=destroy`(conn: var UnixConnObj) =
   close(addr conn.stream)
   release(conn.stop)
 
+proc `=wasMoved`(conn: var UnixConnObj) {.nodestroy, inline.} =
+  zeroMem(addr conn, sizeof(conn))
+
 proc takeUnixConn*(stream: UnixStreamPtr): UnixConnResult =
   ## Transfer a quiescent raw stream with no pending borrowers. Failure preserves it.
   ## Custom-loop owners keep affinity; standard owners use shared admission.

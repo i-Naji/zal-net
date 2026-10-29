@@ -25,6 +25,9 @@ proc `=destroy`(owner: var UnixListenerObj) =
   closeNow(owner.listener)
   release(owner.accepting)
 
+proc `=wasMoved`(owner: var UnixListenerObj) {.nodestroy, inline.} =
+  zeroMem(addr owner, sizeof(owner))
+
 proc takeUnixListenerRef*(listener: UnixListenerPtr): UnixListenerResult =
   ## Transfer a quiescent listener. No raw accept or serve may still borrow it.
   ## Failure preserves the raw owner.

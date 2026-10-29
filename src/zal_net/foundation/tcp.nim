@@ -33,6 +33,10 @@ proc `=destroy`(conn: var TcpConnObj) =
   close(addr conn.stream)
   release(conn.stop)
 
+proc `=wasMoved`(conn: var TcpConnObj) {.nodestroy, inline.} =
+  ## A zero owner is closed, so the destination alone owns the socket.
+  zeroMem(addr conn, sizeof(conn))
+
 proc takeTcpConn*(stream: TcpStreamPtr): TcpConnResult =
   ## Transfer a quiescent raw stream with no pending borrowers. Failure preserves it.
   ## Custom-loop owners retain their creating loop; standard owners use shared admission.

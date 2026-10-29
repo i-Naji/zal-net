@@ -29,6 +29,9 @@ proc `=destroy`(owner: var UdpSocketObj) =
   close(owner.socket)
   release(owner.stop)
 
+proc `=wasMoved`(owner: var UdpSocketObj) {.nodestroy, inline.} =
+  zeroMem(addr owner, sizeof(owner))
+
 proc newOwner(): UdpSocketRef =
   ## Typed allocation keeps recursively defaulted construction outside templates.
   UdpSocketRef()

@@ -25,6 +25,9 @@ proc `=destroy`(owner: var TcpListenerObj) =
   closeNow(owner.listener)
   release(owner.accepting)
 
+proc `=wasMoved`(owner: var TcpListenerObj) {.nodestroy, inline.} =
+  zeroMem(addr owner, sizeof(owner))
+
 proc takeTcpListenerRef*(listener: TcpListenerPtr): TcpListenerResult =
   ## Transfer a quiescent listener. No raw accept or serve may still borrow it.
   ## Failure preserves the raw owner.
