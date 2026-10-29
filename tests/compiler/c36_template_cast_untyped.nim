@@ -2,6 +2,7 @@
 ## does not compile: "cannot `cast` between types untyped and ptr ...". The
 ## body is typed before the argument is substituted. Workaround: a generic
 ## proc (`proc ua[I](a: var array[I, byte]): ptr UncheckedArray[byte]`).
+## Still reproduces on 0da5a6b7.
 import std/syncio
 
 template at(a: untyped): untyped =

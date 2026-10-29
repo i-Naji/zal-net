@@ -1,6 +1,7 @@
 {.feature: "lenientnils".}
 ## A statement followed by `return` inside a `when` branch of a generic passive proc crashes nimsem ("index -1 not in 0 .. n"). Workaround: `if`/`else` assigning `result` (`direction` in net/stream.nim).
 ## flags: --path:src
+## 0da5a6b7: no crash, but the branch is checked before instantiation and `a.v` is rejected; the workaround stays.
 import std/syncio
 import zal_net/rt
 import zal_net/raw/io
