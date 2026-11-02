@@ -20,7 +20,8 @@ reject() {
   fi
   echo "ok   rejects $source"
 }
-for name in sequence_value string_value reference_value closure_value nested_value; do
+for name in sequence_value string_value reference_value closure_value nested_value array_value \
+    distinct_value inherited_value variant_value destructor_value raw_bypass; do
   reject "tests/plain-data/$name.nim" 'cross-thread byte copies require plain data'
 done
 for name in resize reader; do
