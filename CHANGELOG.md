@@ -31,3 +31,4 @@
 - Use Nimony `0da5a6b7`: a type with a written `=destroy` also defines `=wasMoved`.
 - `IoTimedOut` comes from std/ioring; docs/usage.md describes the pool's `-d:trampolineSteps` trade-off.
 - Use Nimony `941d128a`: `supportsCopyMem` folds at compile time.
+- Plain-data checks use `supportsCopyMem`: a type with a destructor is rejected, a non-closure proc is plain.
