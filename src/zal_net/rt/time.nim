@@ -2,7 +2,7 @@
 import zal_net/private/backend/stdpre
 import std/ioring
 export ioring.Deadline, ioring.never, ioring.monoNow, ioring.after, ioring.afterMs,
-  ioring.earlier, ioring.millisUntil, ioring.IoEvent, ioring.IoEvents,
+  ioring.earlier, ioring.expired, ioring.millisUntil, ioring.IoEvent, ioring.IoEvents,
   ioring.evRead, ioring.evWrite, ioring.ECancelled, ioring.IoTimedOut,
   ioring.`==`, ioring.`<`, ioring.`<=`
 

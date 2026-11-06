@@ -219,7 +219,7 @@ template beParkFd*(fd: cint; write, listener: bool; deadline: Deadline; res: var
       if beStopping():
         res = ECancelled
         break
-      if res == time.IoTimedOut and monoNow() < until:
+      if res == time.IoTimedOut and not expired(until):
         # A polling slice is not readiness. Keep the original deadline so
         # callers with relative idle timeouts cannot restart it every slice.
         slice = min(slice * 2, SliceMaxMs)
@@ -235,7 +235,7 @@ template beParkFd*(fd: cint; write, listener: bool; deadline: Deadline; res: var
         let pause = delay()
         discard submitTimeout(earlier(until, afterMs(hangMs)), grouped(pause))
         suspend()
-        if monoNow() >= until:
+        if expired(until):
           res = time.IoTimedOut
           break
         hangMs = min(hangMs * 2, HangMaxMs)
@@ -246,7 +246,7 @@ template beParkUntil*(deadline: Deadline) =
   block:
     let until = deadline
     var slice = SliceMs
-    while not beStopping() and monoNow() < until:
+    while not beStopping() and not expired(until):
       let cont = delay()
       discard submitTimeout(earlier(until, afterMs(slice)), grouped(cont))
       suspend()
@@ -323,7 +323,7 @@ proc observeNode(n: ptr WaitNode; deadline: Deadline; sliced: bool) {.passive.} 
   while atomicLoad(n.state, moAcquire) == nsParked:
     if beStopping():
       if tryClaim(n, wrClosed): atomicStore(n.state, nsFired, moRelease)
-    elif deadline <= monoNow():
+    elif expired(deadline):
       if tryClaim(n, wrTimedOut): atomicStore(n.state, nsFired, moRelease)
     else:
       let wake = delay()

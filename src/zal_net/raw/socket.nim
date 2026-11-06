@@ -435,7 +435,7 @@ proc closeListener*(fd: cint; acceptors = 1;
   beWakeAcceptors(fd)
   result = wrReady
   while closeOwed(slot) > 0:
-    if deadline <= monoNow():
+    if expired(deadline):
       result = wrTimedOut
       break
     sleepMs(1)

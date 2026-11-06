@@ -115,7 +115,7 @@ proc connectUdpInto*(owner: UdpSocketPtr; remote: SocketAddress;
   if owner[].ok: return ResourceBusy
   if stopping(): return ResourceClosed
   if cancelled(tok): return ECancelled
-  if monoNow() >= deadline: return IoTimedOut
+  if expired(deadline): return IoTimedOut
   let family = address.family(remote)
   if family != AF_INET and family != AF_INET6: return InvalidInput
   var temporary = default(UdpSocket)
@@ -126,7 +126,7 @@ proc connectUdpInto*(owner: UdpSocketPtr; remote: SocketAddress;
     result = -int(osLastError())
     closeFd(takeHandle(temporary.socket))
     return
-  if cancelled(tok) or stopping() or monoNow() >= deadline:
+  if cancelled(tok) or stopping() or expired(deadline):
     result = if cancelled(tok): ECancelled elif stopping(): ResourceClosed else: IoTimedOut
     closeFd(takeHandle(temporary.socket))
     return

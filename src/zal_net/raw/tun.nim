@@ -263,7 +263,7 @@ proc sendFrom*(t: TunDevice; p: pointer; n: int; deadline = never): int {.passiv
     if k != IoAgain: return k
     when defined(windows):
       # A full Wintun ring signals nothing when it drains: look again soon.
-      if not (d == never) and d <= monoNow(): return IoTimedOut
+      if expired(d): return IoTimedOut
       sleepMs(1)
     else:
       parkPoll(t.fd, {evWrite}, d, res)

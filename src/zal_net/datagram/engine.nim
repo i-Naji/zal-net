@@ -391,7 +391,7 @@ proc listAssocs*(e: ptr DatagramEngine; outp: ptr seq[AssocInfo]; limit: int): i
   let m: ListMsgPtr = request
   postEngineMsg(e, addr m.msg)
   let deadline = afterMs(1000)
-  while not engineMsgDone(addr m.msg) and monoNow() < deadline:
+  while not engineMsgDone(addr m.msg) and not expired(deadline):
     sleepMs(1)
   if engineMsgDone(addr m.msg) and m.msg.ok:
     let items = listItems(m)

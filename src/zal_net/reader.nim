@@ -47,7 +47,7 @@ proc fill*[S: ByteStream](r: ptr BufReader[S]; deadline = never;
   defer: release(tok)
   ioCheckpoint(0)
   if cancelled(tok) or stopping(): return ECancelled
-  if deadline <= monoNow(): return IoTimedOut
+  if expired(deadline): return IoTimedOut
   if r.head > 0 and r.tail == r.buf.len:
     let n = r.tail - r.head
     moveMem(addr r.buf[0], addr r.buf[r.head], n)
@@ -87,7 +87,7 @@ proc readUntil*[S: ByteStream](r: ptr BufReader[S]; delim: string; maxLen = 16 *
   defer: release(tok)
   ioCheckpoint(0)
   if cancelled(tok) or stopping(): return ECancelled
-  if deadline <= monoNow(): return IoTimedOut
+  if expired(deadline): return IoTimedOut
   var scanned = 0
   while true:
     let at = find(r, max(0, scanned - delim.len + 1), delim)
@@ -138,7 +138,7 @@ proc recvInto*[S: ByteStream](r: ptr BufReader[S]; p: pointer; n: int; deadline 
   defer: release(tok)
   ioCheckpoint(0)
   if cancelled(tok) or stopping(): return ECancelled
-  if deadline <= monoNow(): return IoTimedOut
+  if expired(deadline): return IoTimedOut
   if buffered(r) == 0:
     if n >= r.buf.len:
       when S is CancellableByteStream:
@@ -175,7 +175,7 @@ proc sendFrom*[S: ByteStream](r: ptr BufReader[S]; p: pointer; n: int; deadline 
   defer: release(tok)
   ioCheckpoint(0)
   if cancelled(tok) or stopping(): return ECancelled
-  if deadline <= monoNow(): return IoTimedOut
+  if expired(deadline): return IoTimedOut
   when S is CancellableByteStream:
     result = sendFrom(r.src, p, n, deadline, tok)
   else:

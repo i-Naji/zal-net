@@ -40,7 +40,7 @@ template offload*[A, R](fn: OffloadFn[A, R]; argument: A; deadline: Deadline = n
     let until = deadline
     if stopping() or blockingPoolClosing(): outcome.code = ResourceClosed
     elif cancelled(cancel): outcome.code = ECancelled
-    elif monoNow() >= until: outcome.code = IoTimedOut
+    elif expired(until): outcome.code = IoTimedOut
     else:
       let work = newWork[A, R](fn, argument)
       let job = rawJob(work)

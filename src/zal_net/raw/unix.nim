@@ -96,7 +96,7 @@ proc connectUnixInto*(stream: UnixStreamPtr; path: string; timeoutMs = 10_000;
   let a = unixAddress(path)
   if not isValid(a): return InvalidInput
   let endAt = earlier(deadline, afterMs(timeoutMs))
-  if monoNow() >= endAt: return IoTimedOut
+  if expired(endAt): return IoTimedOut
   let fd = sockSocket(AfUnix, SOCK_STREAM, 0)
   if fd < 0: return -int(osLastError())
   setNonblock(fd)
@@ -194,7 +194,7 @@ proc acceptUnixInto*(stream: UnixStreamPtr; listener: UnixListenerPtr;
   while true:
     if cancelled(tok): return ECancelled
     if stopping(): return ResourceClosed
-    if monoNow() >= deadline: return IoTimedOut
+    if expired(deadline): return IoTimedOut
     let fd = acceptNow(listener[].fd)
     if fd >= 0:
       if cancelled(tok) or stopping():

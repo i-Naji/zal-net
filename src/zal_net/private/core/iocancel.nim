@@ -59,7 +59,7 @@ template parkCancellable*(fd: cint; events: IoEvents; deadline: Deadline;
         outcome = ECancelled
         break
       if not owned and (tokens.operation != nil or tokens.ownerStop != nil or tokens.peerStop != nil) and
-          outcome == IoTimedOut and monoNow() < deadline:
+          outcome == IoTimedOut and not expired(deadline):
         slice = min(slice * 2, CancelPollMaxMs)
         continue
       break
@@ -81,7 +81,7 @@ template parkCancellable*(fd: cint; events: IoEvents; deadline: Deadline;
       if cancelled(tok):
         outcome = ECancelled
         break
-      if tok != nil and outcome == IoTimedOut and monoNow() < deadline:
+      if tok != nil and outcome == IoTimedOut and not expired(deadline):
         slice = min(slice * 2, CancelPollMaxMs)
         continue
       break
@@ -100,7 +100,7 @@ template parkAcceptCancellable*(fd: cint; deadline: Deadline;
       if cancelled(tok):
         outcome = ECancelled
         break
-      if tok != nil and outcome == IoTimedOut and monoNow() < deadline:
+      if tok != nil and outcome == IoTimedOut and not expired(deadline):
         slice = min(slice * 2, CancelPollMaxMs)
         continue
       break

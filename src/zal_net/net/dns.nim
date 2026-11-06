@@ -223,7 +223,7 @@ proc resolveAsync*(host: string; port: uint16; sockType, family: cint;
   defer: release(tok)
   if cancelled(tok): return ECancelled
   if stopping(): return ResourceClosed
-  if monoNow() >= deadline: return IoTimedOut
+  if expired(deadline): return IoTimedOut
   if not validHost(host): return InvalidInput
   var sa = default(SockAddrBuf)
   if parseNumeric(host, port, family, sa):

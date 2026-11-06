@@ -47,7 +47,7 @@ template fdRecvInline*(fd: cint; timeoutMs: int; p: pointer; n: int;
         if cancelled(cancellationSources) or stopping():
           outcome = ECancelled
           break
-        if d <= monoNow():
+        if expired(d):
           outcome = IoTimedOut
           break
         outcome = readSome(fd, p, min(count, chunk))
@@ -86,7 +86,7 @@ template fdSendInline*(fd: cint; timeoutMs: int; p: pointer; n: int;
         if cancelled(cancellationSources) or stopping():
           outcome = ECancelled
           break
-        if d <= monoNow():
+        if expired(d):
           outcome = IoTimedOut
           break
         outcome = writeSome(fd, p, min(count, chunk))
@@ -112,7 +112,7 @@ proc fdRecvv*(fd: cint; timeoutMs: int; iov: ptr IoVec; count: int; deadline: De
   ioCheckpoint(0)
   while true:
     if cancelled(tok) or stopping(): return ECancelled
-    if d <= monoNow(): return IoTimedOut
+    if expired(d): return IoTimedOut
     let k = sockReadv(fd, iov, cint(count))
     if k >= 0: return k
     let err = int(osLastError())
@@ -131,7 +131,7 @@ proc fdSendv*(fd: cint; timeoutMs: int; iov: ptr IoVec; count: int; deadline: De
   ioCheckpoint(0)
   while true:
     if cancelled(tok) or stopping(): return ECancelled
-    if d <= monoNow(): return IoTimedOut
+    if expired(d): return IoTimedOut
     let k = sockWritev(fd, iov, cint(count))
     if k >= 0: return k
     let err = int(osLastError())

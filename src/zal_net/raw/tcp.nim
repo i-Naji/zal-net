@@ -194,7 +194,7 @@ proc connectInto*(stream: TcpStreamPtr; a: SocketAddress; timeoutMs = 10_000;
   if stopping(): return ResourceClosed
   if not isValid(a) or a.raw.len > cuint(sizeof(SockaddrStorage)): return InvalidInput
   let endAt = earlier(deadline, afterMs(timeoutMs))
-  if monoNow() >= endAt: return IoTimedOut
+  if expired(endAt): return IoTimedOut
   var pending = false
   var error = 0
   let fd = startConnect(unsafeAddr a.raw, noDelay, pending, error)
@@ -247,12 +247,12 @@ proc attempt(r: ptr Race; sa: SocketAddress; index: int; start: Deadline; deadli
   ## claim the win or record the failure.
   let myTurn = Deadline(int64(start) + int64(index) * int64(AttemptDelayMs) * 1_000_000)
   while atomicLoad(r.winner, moAcquire) < 0 and atomicLoad(r.failed, moAcquire) < index and
-        monoNow() < myTurn and monoNow() < deadline and not cancelled(r.tok):
+        not expired(myTurn) and not expired(deadline) and not cancelled(r.tok):
     discard wait(addr r.kick, earlier(myTurn, deadline), r.tok)
   var won = false
   var code = ResourceClosed
   if cancelled(r.tok): code = ECancelled
-  elif monoNow() >= deadline: code = IoTimedOut
+  elif expired(deadline): code = IoTimedOut
   elif atomicLoad(r.winner, moAcquire) < 0:
     var pending = false
     let fd = startConnect(unsafeAddr sa.raw, noDelay, pending, code)
@@ -306,7 +306,7 @@ proc connectInto*(stream: TcpStreamPtr; host: string; port: uint16;
   let count = resolveAsync(host, port, SOCK_STREAM, 0.cint, resolveBuffer(resolved), endAt, tok)
   if count < 0: return count
   if cancelled(tok): return ECancelled
-  if monoNow() >= endAt: return IoTimedOut
+  if expired(endAt): return IoTimedOut
   var addresses: seq[SocketAddress] = @[]
   for index in 0..<count: addresses.add SocketAddress(raw: resolved[index])
   let addrs = interleave(addresses)
@@ -411,7 +411,7 @@ proc acceptInto*(stream: TcpStreamPtr; listener: TcpListenerPtr;
   while true:
     if cancelled(tok): return ECancelled
     if stopping(): return ResourceClosed
-    if monoNow() >= deadline: return IoTimedOut
+    if expired(deadline): return IoTimedOut
     let fd = acceptNow(listener[].fd)
     if fd >= 0:
       if cancelled(tok) or stopping():

@@ -113,7 +113,7 @@ proc nextReady*(readiness: Readiness; deadline: Deadline): ReadyEvent {.passive.
   while true:
     result = takeReady(readiness)
     if result.registration != nil: return
-    if stopping() or monoNow() >= deadline: return
+    if stopping() or expired(deadline): return
     discard wait(addr readiness.available, deadline)
 
 proc join*(registration: Registration) {.passive.} =

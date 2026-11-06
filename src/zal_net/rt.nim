@@ -149,7 +149,7 @@ template parkReady*(fd: cint; events: IoEvents; activity: nil ptr int64;
       if res > 0: break
       if res == IoTimedOut and activity != nil:
         deadline = ioDeadline(activity, timeoutMs)
-        if monoNow() < deadline: continue
+        if not expired(deadline): continue
         break
       if not transientIo(res): break
 
