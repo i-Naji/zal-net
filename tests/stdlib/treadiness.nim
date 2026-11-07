@@ -76,6 +76,7 @@ for round in 0..<Rounds:
     assert monoNow() < deadline, "standard readiness continuation was lost"
 assert atomicLoad(ready, moAcquire) == Rounds
 assert atomicLoad(liveCaptures, moAcquire) == 0
+let workers = workerCount
 shutdown()
 assert atomicLoad(destroyedCaptures, moAcquire) == Rounds
-echo "PASS unchanged std: ", Rounds, " timeout/reuse/capture cycles; workers=", workerCount
+echo "PASS unchanged std: ", Rounds, " timeout/reuse/capture cycles; workers=", workers

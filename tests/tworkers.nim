@@ -16,4 +16,5 @@ proc main() {.passive.} =
 assert runMain(main())
 assert atomicLoad(completed, moAcquire) == 1
 assert runtimeFinished()
+assert runtimeWorkers() == workersFromEnv("ZAL_WORKERS")
 echo "PASS configured workers: ", runtimeWorkers()

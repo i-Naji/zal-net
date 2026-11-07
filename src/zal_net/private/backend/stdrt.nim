@@ -92,6 +92,12 @@ proc schedule(c: Continuation) =
     while not enqueueExternal(external, c): sleepUs(1000)
 
 var gStopReq, gFinished, gActive: int
+var gWorkers: int
+
+proc poolWorkers(): int {.inline.} =
+  # The pool forgets its size when it shuts down.
+  result = workerCount
+  if result == 0: result = atomicLoad(gWorkers, moAcquire)
 var gAdmission: TicketLock
 var taskAnchor = default(CoroutineBase)
 var rootAnchor = default(CoroutineBase)
@@ -164,6 +170,7 @@ proc beRun*() =
     for i in 0..<count: submit(grouped(incoming[i]))
     discard pollCompletions(completions)
     sleepUs(1000)
+  atomicStore(gWorkers, workerCount, moRelease)
   shutdown()
   closeWakePool()
   atomicStore(gFinished, 1, moRelease)
@@ -193,7 +200,7 @@ proc beNudgeFd*(fd: cint): bool =
 proc beNeedsPoke*(): bool {.inline.} = true
   ## A poll armed on the listener completes only when it becomes readable.
 
-proc runtimeWorkers*(): int = workerCount
+proc runtimeWorkers*(): int = poolWorkers()
   ## Pool workers. Placement is the pool's: `spawnAll` runs one instance.
 
 proc onLoop*(): bool {.inline.} = isPoolWorker()
@@ -353,12 +360,12 @@ proc beResumeNode*(n: ptr WaitNode) =
 
 # ------------------------------------------------------------------ shards
 
-proc beShardCount*(): int = workerCount + 1
+proc beShardCount*(): int = poolWorkers() + 1
   ## One shard per pool worker, plus one shared by every other thread.
 
 proc beShardId*(): int {.inline.} =
   if isPoolWorker(): result = threadIdx
-  else: result = workerCount
+  else: result = poolWorkers()
 
 proc beFinished*(): bool = atomicLoad(gFinished, moAcquire) != 0
 

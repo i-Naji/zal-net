@@ -62,5 +62,6 @@ for round in 0..<100:
       assert false, "second reader was not resumed"
   assert atomicLoad(received, moAcquire) == 3
   assert nativeClose(pair[0]) == 0 and nativeClose(pair[1]) == 0
+let workers = workerCount
 shutdown()
-echo "PASS 100 shared-readiness pairs; workers=", workerCount
+echo "PASS 100 shared-readiness pairs; workers=", workers
