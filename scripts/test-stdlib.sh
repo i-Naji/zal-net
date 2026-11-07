@@ -24,7 +24,7 @@ case "$MODE" in
   *) echo "unknown MODE: $MODE" >&2; exit 2 ;;
 esac
 for TEST in treadiness tadmission tdrain tcontinuations tretry; do
-  XDG_CACHE_HOME="$OUT/c-cache-$TEST" "$ROOT/bin/nimony" c --ff "$@" --nimcache:"$OUT/cache-$TEST" -o:"$OUT/$TEST" \
+  XDG_CACHE_HOME="$OUT/c-cache" "$ROOT/bin/nimony" c --ff "$@" --nimcache:"$OUT/cache-$TEST" -o:"$OUT/$TEST" \
     "tests/stdlib/$TEST.nim" >"$OUT/$TEST-build.log" 2>&1 || {
       cat "$OUT/$TEST-build.log" >&2; exit 1;
     }
