@@ -33,3 +33,4 @@
 - Use Nimony `941d128a`: `supportsCopyMem` folds at compile time.
 - Plain-data checks use `supportsCopyMem`: a type with a destructor is rejected, a non-closure proc is plain.
 - Use Nimony `288097b1`: deadline checks go through `expired`, which rt/time re-exports.
+- Use Nimony `ee549766`: `readLine` returns -12 when the line cannot be stored.
