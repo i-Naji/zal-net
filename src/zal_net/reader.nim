@@ -119,7 +119,9 @@ proc readLine*[S: ByteStream](r: ptr BufReader[S]; line: ptr string; maxLen = 81
     if n > 0 and r.buf[r.head + n - 1] == byte('\r'): n = n - 1
   if n > maxLen: return TooLong
   if n > 0:
-    copyMem(beginStore(line[], n), addr r.buf[r.head], n)
+    let dest = beginStore(line[], n)
+    if dest == nil: return -12   # ENOMEM
+    copyMem(dest, addr r.buf[r.head], n)
     endStore(line[])
   else:
     line[].setLen(0)
