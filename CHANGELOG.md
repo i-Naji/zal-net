@@ -35,3 +35,4 @@
 - Use Nimony `288097b1`: deadline checks go through `expired`, which rt/time re-exports.
 - Use Nimony `ee549766`: `readLine` returns -12 when the line cannot be stored.
 - `runtimeWorkers` and the stats shards keep the pool size after the runtime has finished.
+- Use Nimony `abeb5082`.
