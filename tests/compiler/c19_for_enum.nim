@@ -1,5 +1,6 @@
 {.feature: "lenientnils".}
-## `for x in SomeEnum` is unsupported. Workaround: loop over the ordinals.
+## `for x in SomeEnum` was unsupported; the workaround was a loop over the ordinals.
+## 4ba90a78: fixed, kept as a guard.
 import std/syncio
 
 type E = enum ea, eb, ec
