@@ -75,10 +75,8 @@ when defined(windows):
       while k < buf[i].name.len and buf[i].name[k] != '\0':
         ni.name.add buf[i].name[k]
         k = k + 1
-      var f = 0
-      while f <= ord(high(InterfaceFlag)):
-        if (buf[i].flags and (1'u32 shl f)) != 0: ni.flags.incl InterfaceFlag(f)
-        f = f + 1
+      for flag in InterfaceFlag:
+        if (buf[i].flags and (1'u32 shl ord(flag))) != 0: ni.flags.incl flag
       k = 0
       while k < int(buf[i].naddrs):
         let a = buf[i].addrs[k]

@@ -154,10 +154,8 @@ proc joinSignals*(): bool =
 
 proc fromNumber(n: int): Signal =
   result = sigNone
-  var i = ord(sigHup)
-  while i <= ord(high(Signal)):
-    if int(number(Signal(i))) == n: return Signal(i)
-    i = i + 1
+  for sig in Signal:
+    if sig != sigNone and int(number(sig)) == n: return sig
 
 proc waitSignal*(timeoutMs = -1): Signal {.passive.} =
   ## The next watched signal to arrive; sigNone after `timeoutMs` (-1:
