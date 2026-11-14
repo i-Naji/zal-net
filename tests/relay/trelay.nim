@@ -410,8 +410,8 @@ proc main() {.passive.} =
   echo "PASS framer <-> plain, 2 MiB each way, half-close"
 
   # 200 tiny records in a burst: more than MaxSpans per batch.
-  let c2 = makeConn(5000, nil, nil, addr gFrame, nil, o1, o2)
-  spawnTask runRelay(c2)
+  let r2 = makeConn(5000, nil, nil, addr gFrame, nil, o1, o2)
+  spawnTask runRelay(r2)
   spawnTask writeFramed(o2, 2000, 3, 10, 18, 16, true)
   spawnTask readPlain(o1, 2000, 3, "burst")
   shutdownWrite(o1)
@@ -422,8 +422,8 @@ proc main() {.passive.} =
   echo "PASS 200-record burst"
 
   # plain <-> plain, 1 MiB each way.
-  let c3 = makeConn(5000, nil, nil, nil, nil, o1, o2)
-  spawnTask runRelay(c3)
+  let r3 = makeConn(5000, nil, nil, nil, nil, o1, o2)
+  spawnTask runRelay(r3)
   spawnTask writePlain(o1, 1 shl 20, 5, true)
   spawnTask readPlain(o2, 1 shl 20, 5, "plain a")
   spawnTask writePlain(o2, 1 shl 20, 9, true)
@@ -435,8 +435,8 @@ proc main() {.passive.} =
   echo "PASS plain <-> plain, 1 MiB each way"
 
   # A plain source laid out for a small-record sink, and back: 2 MiB each way.
-  let c5 = makeConn(5000, nil, addr gSmall, addr gSmall, nil, o1, o2)
-  spawnTask runRelay(c5)
+  let r5 = makeConn(5000, nil, addr gSmall, addr gSmall, nil, o1, o2)
+  spawnTask runRelay(r5)
   spawnTask writePlain(o1, 2 shl 20, 13, true)
   spawnTask readFramed(o2, 2 shl 20, 13, 4, 4, 4096, "plain->small")
   spawnTask writeFramed(o2, 2 shl 20, 17, 4000, 4, 4, true)
@@ -448,8 +448,8 @@ proc main() {.passive.} =
   echo "PASS plain <-> 4/4/4096 framer, 2 MiB each way"
 
   # The same geometry on both sides: records re-sealed in place, 1 MiB.
-  let c6 = makeConn(5000, addr gSmall, addr gSmall, nil, nil, o1, o2)
-  spawnTask runRelay(c6)
+  let r6 = makeConn(5000, addr gSmall, addr gSmall, nil, nil, o1, o2)
+  spawnTask runRelay(r6)
   spawnTask writeFramed(o1, 1 shl 20, 19, 3000, 4, 4, true)
   spawnTask readFramed(o2, 1 shl 20, 19, 4, 4, 4096, "small->small")
   shutdownWrite(o2)
@@ -463,9 +463,9 @@ proc main() {.passive.} =
   # before the first batch, another before the half-close; plain and framed
   # sources.
   for framedSrc in [false, true]:
-    let cm = if framedSrc: makeConn(5000, addr gSmall, addr gMark, nil, nil, o1, o2)
+    let rm = if framedSrc: makeConn(5000, addr gSmall, addr gMark, nil, nil, o1, o2)
              else: makeConn(5000, nil, addr gMark, nil, nil, o1, o2)
-    spawnTask runRelay(cm)
+    spawnTask runRelay(rm)
     if framedSrc: spawnTask writeFramed(o1, 1 shl 20, 31, 3000, 4, 4, true)
     else: spawnTask writePlain(o1, 1 shl 20, 31, true)
     let before = atomicLoad(gOk, moAcquire) + atomicLoad(gBad, moAcquire)
@@ -481,8 +481,8 @@ proc main() {.passive.} =
   # A sink that writes its own prefix (a kTLS control record), re-entered
   # until done; a source whose failed read after whole records is a clean end.
   gPrefixCalls = 0
-  let cp = makeConn(5000, nil, addr gSelfPrefix, nil, nil, o1, o2)
-  spawnTask runRelay(cp)
+  let rp = makeConn(5000, nil, addr gSelfPrefix, nil, nil, o1, o2)
+  spawnTask runRelay(rp)
   spawnTask writePlain(o1, 1 shl 20, 47, true)
   let bp = atomicLoad(gOk, moAcquire) + atomicLoad(gBad, moAcquire)
   spawnTask readFramed(o2, 1 shl 20, 47, 4, 4, 4096, "self-written prefix")
@@ -497,9 +497,9 @@ proc main() {.passive.} =
   gReadFailed = 0
   let lr = tryListenTcp(0, 16, "127.0.0.1")
   assert lr.ok
-  let cr = makeConn(5000, addr gEndOnReset, nil, nil, nil, o1, o2)
-  cr.a.src = lr.fd
-  spawnTask runRelay(cr)
+  let rr = makeConn(5000, addr gEndOnReset, nil, nil, nil, o1, o2)
+  rr.a.src = lr.fd
+  spawnTask runRelay(rr)
   let br = atomicLoad(gOk, moAcquire) + atomicLoad(gBad, moAcquire)
   spawnTask readPlain(o2, 0, 53, "a clean end after a failed read")
   shutdownWrite(o2)
@@ -515,19 +515,19 @@ proc main() {.passive.} =
   # sink's peer is gone): the sink's close hook gets its own state back.
   gCloseSinkOk = 0
   gCloseSinkBad = 0
-  let cs = makeConn(5000, nil, addr gCheckedSink, nil, nil, o1, o2)
-  sinkState[array[StateWords, uint64]](addr cs.a)[][1] = StateMark
+  let rs = makeConn(5000, nil, addr gCheckedSink, nil, nil, o1, o2)
+  sinkState[array[StateWords, uint64]](addr rs.a)[][1] = StateMark
   let sAt = HeadRoom + 4
-  assert ensurePayload(addr cs.a), "preload payload allocation"
-  for i in 0 ..< 60_000: buf(addr cs.a)[sAt + i] = pat(i, 59)
-  cs.a.spans[0] = Span(off: sAt, len: 60_000)
-  cs.a.nspans = 1
-  cs.a.bytes = 60_000
+  assert ensurePayload(addr rs.a), "preload payload allocation"
+  for i in 0 ..< 60_000: buf(addr rs.a)[sAt + i] = pat(i, 59)
+  rs.a.spans[0] = Span(off: sAt, len: 60_000)
+  rs.a.nspans = 1
+  rs.a.bytes = 60_000
   lingerRst(o2)                                  # the sink's peer resets: the first write fails
   shutdownWrite(o1)
   let endsBefore = atomicLoad(gEnds, moAcquire)
-  cs.hooks = addr gHooks
-  spawnTask runRelay(cs)
+  rs.hooks = addr gHooks
+  spawnTask runRelay(rs)
   waitEnds(endsBefore + 1)
   var spinsS = 0
   while gCloseSinkOk + gCloseSinkBad == 0 and spinsS < 200:
@@ -540,15 +540,15 @@ proc main() {.passive.} =
   # A direction that fails (a corrupt record) resets its sink: the peer
   # there sees an error, never a clean end of a truncated stream.
   var ending = 1
-  let cf = makeConn(5000, addr gSmall, nil, nil, nil, o1, o2)
+  let rf = makeConn(5000, addr gSmall, nil, nil, nil, o1, o2)
   closeFd(o2)                                    # the destination becomes TCP: a reset shows there
-  closeFd(cf.up)
+  closeFd(rf.up)
   var tr: cint = -1
   tcpPair(o2, tr)
-  cf.up = tr
-  cf.a.dst = tr
-  cf.b.src = tr
-  spawnTask runRelay(cf)
+  rf.up = tr
+  rf.a.dst = tr
+  rf.b.src = tr
+  spawnTask runRelay(rf)
   let bf = atomicLoad(gOk, moAcquire) + atomicLoad(gBad, moAcquire)
   spawnTask readToEnd(o2, addr ending)
   var bad = default(array[16, byte])
@@ -568,22 +568,22 @@ proc main() {.passive.} =
   var endA = 1
   var endB = 1
   var gotB = 0
-  let cm = makeConn(5000, addr gSmall, nil, nil, addr gMark, o1, o2)
+  let rm = makeConn(5000, addr gSmall, nil, nil, addr gMark, o1, o2)
   closeFd(o1)
   closeFd(o2)
-  closeFd(cm.fd)
-  closeFd(cm.up)
+  closeFd(rm.fd)
+  closeFd(rm.up)
   var tfd: cint = -1
   var tup: cint = -1
   tcpPair(o1, tfd)
   tcpPair(o2, tup)
-  cm.fd = tfd
-  cm.a.src = tfd
-  cm.b.dst = tfd
-  cm.up = tup
-  cm.a.dst = tup
-  cm.b.src = tup
-  spawnTask runRelay(cm)
+  rm.fd = tfd
+  rm.a.src = tfd
+  rm.b.dst = tfd
+  rm.up = tup
+  rm.a.dst = tup
+  rm.b.src = tup
+  spawnTask runRelay(rm)
   let bm = atomicLoad(gOk, moAcquire) + atomicLoad(gBad, moAcquire)
   spawnTask readToEnd(o2, addr endA)
   spawnTask readCounting(o1, addr endB, addr gotB)
@@ -596,14 +596,14 @@ proc main() {.passive.} =
   echo "PASS a failed direction fails the other: its sink peer sees a reset, no FIN, no closing record"
 
   # A first span whose sink tail would pass the buffer's end: through alt.
-  let ct = makeConn(5000, nil, addr gSmall, nil, nil, o1, o2)
+  let rz = makeConn(5000, nil, addr gSmall, nil, nil, o1, o2)
   let tAt = BufCap - 102
-  assert ensurePayload(addr ct.a), "preload payload allocation"
-  for i in 0 ..< 100: buf(addr ct.a)[tAt + i] = pat(i, 61)
-  ct.a.spans[0] = Span(off: tAt, len: 100)
-  ct.a.nspans = 1
-  ct.a.bytes = 100
-  spawnTask runRelay(ct)
+  assert ensurePayload(addr rz.a), "preload payload allocation"
+  for i in 0 ..< 100: buf(addr rz.a)[tAt + i] = pat(i, 61)
+  rz.a.spans[0] = Span(off: tAt, len: 100)
+  rz.a.nspans = 1
+  rz.a.bytes = 100
+  spawnTask runRelay(rz)
   shutdownWrite(o1)
   let bt = atomicLoad(gOk, moAcquire) + atomicLoad(gBad, moAcquire)
   spawnTask readFramed(o2, 100, 61, 4, 4, 4096, "a first span at the buffer's end")
@@ -617,9 +617,9 @@ proc main() {.passive.} =
   # Hooks: onBatch sees every byte; onEnd runs once, with the counters.
   resetHooks()
   let b7 = atomicLoad(gOk, moAcquire) + atomicLoad(gBad, moAcquire)
-  let c7 = makeConn(5000, nil, nil, nil, nil, o1, o2)
-  c7.hooks = addr gHooks
-  spawnTask runRelay(c7)
+  let r7 = makeConn(5000, nil, nil, nil, nil, o1, o2)
+  r7.hooks = addr gHooks
+  spawnTask runRelay(r7)
   spawnTask writePlain(o1, 1 shl 20, 23, true)
   spawnTask readPlain(o2, 1 shl 20, 23, "hooks a")
   spawnTask writePlain(o2, 1 shl 19, 29, true)
@@ -636,8 +636,8 @@ proc main() {.passive.} =
 
   # Pairs that do not fit in place: relaid out, one copy per batch.
   let b8 = atomicLoad(gOk, moAcquire) + atomicLoad(gBad, moAcquire)
-  let c8 = makeConn(5000, addr gFrame, addr gSmall, addr gSmall, addr gFrame, o1, o2)
-  spawnTask runRelay(c8)
+  let r8 = makeConn(5000, addr gFrame, addr gSmall, addr gSmall, addr gFrame, o1, o2)
+  spawnTask runRelay(r8)
   spawnTask writeFramed(o1, 2 shl 20, 37, 60_000, 18, 16, true)
   spawnTask readFramed(o2, 2 shl 20, 37, 4, 4, 4096, "65535 -> 4096 relaid out")
   waitChecks(b8 + 1)
@@ -652,15 +652,15 @@ proc main() {.passive.} =
   # A first span longer than the sink's record (a handshake's leftover):
   # split, in order, with the marking sink's state carried across.
   let b9 = atomicLoad(gOk, moAcquire) + atomicLoad(gBad, moAcquire)
-  let c9 = makeConn(5000, nil, addr gMark, nil, nil, o1, o2)
+  let r9 = makeConn(5000, nil, addr gMark, nil, nil, o1, o2)
   let first = 60_000
   let at = HeadRoom + 4
-  assert ensurePayload(addr c9.a), "preload payload allocation"
-  for i in 0 ..< first: buf(addr c9.a)[at + i] = pat(i, 43)
-  c9.a.spans[0] = Span(off: at, len: first)
-  c9.a.nspans = 1
-  c9.a.bytes = first
-  spawnTask runRelay(c9)
+  assert ensurePayload(addr r9.a), "preload payload allocation"
+  for i in 0 ..< first: buf(addr r9.a)[at + i] = pat(i, 43)
+  r9.a.spans[0] = Span(off: at, len: first)
+  r9.a.nspans = 1
+  r9.a.bytes = first
+  spawnTask runRelay(r9)
   spawnTask writePlainFrom(o1, first, 1 shl 20, 43, true)
   spawnTask readFramed(o2, first + (1 shl 20), 43, 4, 4, 4096, "split first span")
   shutdownWrite(o2)
@@ -677,9 +677,9 @@ proc main() {.passive.} =
 
   # Idle timeout: nothing moves, the relay gives up and closes.
   resetHooks()
-  let c4 = makeConn(150, nil, nil, nil, nil, o1, o2)
-  c4.hooks = addr gHooks
-  spawnTask runRelay(c4)
+  let r4 = makeConn(150, nil, nil, nil, nil, o1, o2)
+  r4.hooks = addr gHooks
+  spawnTask runRelay(r4)
   var b = 0'u8
   let t0 = monoNow()
   let n = waitRead(o1, addr b, 1, 3000)
