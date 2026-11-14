@@ -86,7 +86,8 @@ type
     raw: rawtcp.TcpListener
     local: rawunix.UnixListener   ## the one in use when `isLocal`
     isLocal: bool
-    stop: nil CancelToken
+    stop: nil CancelToken    ## ends `accept`
+    drain: nil CancelToken   ## parent of every accepted connection's token
     noDelay: bool
 
 proc fd(c: Conn): cint {.inline.} = c.slot - 1
@@ -372,10 +373,12 @@ proc connect*(address: SocketAddress; dl: Deadline = never;
 proc listen*(port: uint16; host = ""; backlog = 1024; stop: nil CancelToken = nil;
              noDelay = true; reusePort = false): Listener {.raises.} =
   ## Listen on `host`, or on every address when it is empty. Port 0 asks the
-  ## kernel for one; `port` says which. Connections accepted here get children
-  ## of `stop`, so cancelling it ends the accept and every connection.
+  ## kernel for one; `port` says which. Cancelling `stop` ends `accept` and
+  ## leaves the connections already accepted alone, so a server can stop
+  ## taking work and still finish what it has. `endConnectionsWith` names the
+  ## token that ends those.
   result = Listener(raw: default(rawtcp.TcpListener), local: default(rawunix.UnixListener),
-                    isLocal: false, stop: stop, noDelay: noDelay)
+                    isLocal: false, stop: stop, drain: nil, noDelay: noDelay)
   retain(stop)
   checkIo(listenInto(addr result.raw, port, host, backlog, noDelay, reusePort))
 
@@ -391,7 +394,7 @@ proc listenUnix*(path: string; backlog = 1024; stop: nil CancelToken = nil): Lis
   ## Listen on a Unix-domain stream socket. A stale socket file at `path` is
   ## replaced, a live one is refused, and `close` removes the file.
   result = Listener(raw: default(rawtcp.TcpListener), local: default(rawunix.UnixListener),
-                    isLocal: true, stop: stop, noDelay: false)
+                    isLocal: true, stop: stop, drain: nil, noDelay: false)
   retain(stop)
   checkIo(listenUnixInto(addr result.local, path, backlog))
 
@@ -402,6 +405,15 @@ proc localListener*(l: var Listener): rawunix.UnixListenerPtr {.inline.} = addr 
 proc isLocal*(l: Listener): bool {.inline.} = l.isLocal
   ## True for a Unix-domain listener.
 proc stopToken*(l: Listener): nil CancelToken {.inline.} = l.stop
+proc drainToken*(l: Listener): nil CancelToken {.inline.} = l.drain
+
+proc endConnectionsWith*(l: var Listener; token: nil CancelToken) =
+  ## Connections accepted from now on get a child of `token`: cancelling it
+  ## shuts each of them down. Without one, a connection ends when its handler
+  ## does or when the runtime stops.
+  retain(token)
+  release(l.drain)
+  l.drain = token
 proc tunesNoDelay*(l: Listener): bool {.inline.} = l.noDelay
 
 template accept*(l: var Listener; dl: Deadline = never): Conn =
@@ -417,7 +429,7 @@ template accept*(l: var Listener; dl: Deadline = never): Conn =
       var s = default(rawtcp.TcpStream)
       checkIo(acceptInto(addr s, rawListener(l), 0, tunesNoDelay(l), dl, stopToken(l)))
       accepted = rawtcp.takeNativeHandle(addr s)
-    initConn(accepted, never, stopToken(l))
+    initConn(accepted, never, drainToken(l))
 
 proc close*(l: var Listener) =
   ## Stop listening. The owner calls this while no task waits in `accept`,
@@ -426,3 +438,5 @@ proc close*(l: var Listener) =
   else: rawtcp.closeNow(l.raw)
   release(l.stop)
   l.stop = nil
+  release(l.drain)
+  l.drain = nil
