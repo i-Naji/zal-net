@@ -31,7 +31,7 @@ import zal_net/private/sys/threads
 
 import zal_net/net/sockaddr
 import zal_net/net/dns
-import zal_net/foundation/readiness
+import zal_net/private/datagram/readiness
 import zal_net/rt/blocking
 import zal_net/net/endpoint
 import zal_net/private/datagram/index
