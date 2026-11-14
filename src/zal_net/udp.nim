@@ -91,9 +91,8 @@ proc `=copy`*(dest: var UdpSocket; src: UdpSocket) {.error.}
 
 proc initUdp(fd, family: cint; stop: nil CancelToken): UdpSocket =
   # The child token is the socket's own: cancelling it ends this socket's
-  # waits and leaves the parent alone. Like the token of `foundation/udp`, it
-  # is not bound to the descriptor with `adoptFd`: a UDP socket is never shut
-  # down.
+  # waits and leaves the parent alone. Unlike a `Conn`'s token it is not bound
+  # to the descriptor with `adoptFd`: a UDP socket is never shut down.
   UdpSocket(slot: fd + 1, family: family, deadline: never, stop: newCancelToken(stop))
 
 proc isOpen*(u: UdpSocket): bool {.inline.} = u.fd >= 0
@@ -186,15 +185,15 @@ proc connect*(u: var UdpSocket; host: string; port: uint16;
 # ------------------------------------------------------------- datagrams ---
 
 proc cancellation(u: UdpSocket): IoCancellation {.inline.} =
-  # The socket's token in the owner slot, as `foundation/udp` passes its
-  # own. UDP waits are not interrupted by a shutdown, so they poll in slices.
+  # The socket's token in the owner slot. UDP waits are not interrupted by a
+  # shutdown, so they poll in slices.
   ioCancellation(nil, u.stop)
 
 proc socketFamily(u: UdpSocket): cint {.inline.} = u.family
 
 proc checkSent(sent, total: int) {.raises.} =
   # A datagram goes out whole or not at all. A shorter count would be a cut
-  # message, so it fails the way `net/udp` fails it.
+  # message, so it fails as a send that made no progress.
   checkIo(sent)
   if sent != total: failIo(NoProgress)
 
