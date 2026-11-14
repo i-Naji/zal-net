@@ -1,70 +1,29 @@
 #!/bin/sh
-# SUITE=fast|full|stress|platform; TESTS selects individual cases.
+# Builds tools/tester.nim and hands over to it; see that file for the rules.
+# SUITE=fast|full|stress, TESTS="tests/relay tests/app/treadyio.nim", WORKERS="1 4".
 set -eu
 cd "$(dirname "$0")/.."
 NIMONY=${NIMONY:-nimony}
-WORKERS=${WORKERS:-"1"}
 BUILD_DIR=${BUILD_DIR:-build/test}
-set -- --path:src ${NIMFLAGS:-}
-if [ -n "${ARCH:-}" ]; then set -- "$@" "--passC:-arch $ARCH" "--passL:-arch $ARCH"; fi
+mkdir -p "$BUILD_DIR"
+BUILD_DIR=$(cd "$BUILD_DIR" && pwd)
+TESTER=$BUILD_DIR/tester
+if [ ! -x "$TESTER" ] || [ tools/tester.nim -nt "$TESTER" ]; then
+  XDG_CACHE_HOME="$BUILD_DIR/c-cache" "$NIMONY" c --ff --nimcache:"$BUILD_DIR/cache-tester" \
+    -o:"$TESTER" tools/tester.nim >"$BUILD_DIR/tester.log" 2>&1 || { cat "$BUILD_DIR/tester.log" >&2; exit 1; }
+fi
+set -- --nimony:"$NIMONY" --build:"$BUILD_DIR" --workers:"${WORKERS:-1}"
+for flag in ${NIMFLAGS:-}; do set -- "$@" --flag:"$flag"; done
+if [ -n "${ARCH:-}" ]; then set -- "$@" "--flag:--passC:-arch $ARCH" "--flag:--passL:-arch $ARCH"; fi
 if [ "${SANITIZE:-0}" = 1 ]; then
   # UBSan otherwise recovers and lets a failing sanitizer run print "ok".
   export UBSAN_OPTIONS=${UBSAN_OPTIONS:-halt_on_error=1}
-  set -- "$@" --passC:-fsanitize=address,undefined --passC:-DMI_TRACK_ASAN=1 --passC:-fno-omit-frame-pointer --passL:-fsanitize=address,undefined
-fi
-mkdir -p "$BUILD_DIR"
-BUILD_DIR=$(cd "$BUILD_DIR" && pwd)
-if [ -z "${TESTS:-${ONLY:-}}" ]; then
-  case "${SUITE:-fast}" in
-    fast) TESTS="tcontinuations tcompletiondrain treadyio townership ttcpref tunixref tapplicationtcp tapplicationunix tapplicationudp tudpdeadline tapplicationserve treaderresults ttransport ttransportcancel tservicedrain" ;;
-    full) ;;
-    stress) TESTS="tshutdown truntimedrain tstdhandoff tenginereadiness tenginecapacity tenginestop tengines tdatagram" ;;
-    platform) TESTS="tinterfaces tip ticmp ttun turingclose" ;;
-    *) echo "unknown SUITE (fast, full, stress, platform)" >&2; exit 2 ;;
-  esac
-fi
-fail=0
-prune_case() {
-  if [ "${PRUNE_CASE_CACHES:-0}" = 1 ]; then
-    rm -rf "$BUILD_DIR/$be/cache-$name"
-  fi
-}
-for be in runtime; do
-  flag="--mm:atomicArc -d:useMimalloc"
-  mkdir -p "$BUILD_DIR/$be"
-  selected=$(printf '%s' "${TESTS:-}" | tr ',' ' ')
-  if [ -n "$selected" ]; then srcs=$(for t in $selected; do printf 'tests/%s.nim ' "$t"; done)
-  else srcs="tests/t*.nim examples/*.nim"; fi
-  for src in $srcs; do
-    if [ ! -e "$src" ]; then
-      echo "FAIL missing source $src"
-      fail=1
-      continue
-    fi
-    name=$(basename "$src" .nim)
-    out="$BUILD_DIR/$be/$name"
-    # The incremental cache has produced stale code after signature changes: always --ff.
-    if ! XDG_CACHE_HOME="$BUILD_DIR/$be/c-cache" "$NIMONY" c --ff $flag "$@" --nimcache:"$BUILD_DIR/$be/cache-$name" -o:"$out" "$src" >"$out.log" 2>&1; then
-      echo "FAIL build $be $name (see $out.log)"
-      tail -40 "$out.log"
-      fail=1
-      continue
-    fi
-    case "$src" in examples/*) echo "ok   build $be $name"; prune_case; continue;; esac
-    case_failed=0
-    for w in $WORKERS; do
-      # One worker delays the datagram engine's readiness under churn.
-      if [ "$name" = tdatagram ] && [ "$w" -lt 2 ]; then w=2; fi
-      if ZAL_WORKERS=$w "$out" >"$out.w$w.log" 2>&1; then
-        echo "ok   $be $name workers=$w"
-      else
-        echo "FAIL $be $name workers=$w (see $out.w$w.log)"
-        cat "$out.w$w.log"
-        fail=1
-        case_failed=1
-      fi
-    done
-    if [ "$case_failed" = 0 ]; then prune_case; fi
+  for flag in --passC:-fsanitize=address,undefined --passC:-DMI_TRACK_ASAN=1 --passC:-fno-omit-frame-pointer --passL:-fsanitize=address,undefined; do
+    set -- "$@" --flag:"$flag"
   done
-done
-exit $fail
+fi
+if [ -n "${TESTS:-}" ]; then exec "$TESTER" "$@" $TESTS; fi
+case "${SUITE:-fast}" in
+  full) exec "$TESTER" "$@" tests examples ;;
+  *) exec "$TESTER" "$@" --suite:"${SUITE:-fast}" ;;
+esac

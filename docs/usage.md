@@ -8,8 +8,19 @@ NIMONY=build/toolchain/bin/nimony scripts/test.sh
 NIMONY=build/toolchain/bin/nimony SUITE=full scripts/test.sh
 ```
 
-`SUITE=stress` and `SUITE=platform` select slower or platform-specific checks.
-Windows uses `scripts/test.ps1`; `-Flags -d:nimIoringWsaPoll` selects its fallback.
+`scripts/test.sh` builds `tools/tester.nim` and runs it. Tests live in
+`tests/<category>/t*.nim`, as in Nimony's own suite, and a file next to a test
+changes how it is judged: `tname.output` is what it must print, `tname.msgs`
+means the compiler must reject it with those messages, `tname.args` adds
+compiler flags, `tname.os` names the systems it runs on. Each test has 180
+seconds per run. `tests/known` holds compiler repros; they report what the
+compiler does today and never fail the run.
+
+`TESTS="tests/relay tests/app/treadyio.nim"` picks categories or files,
+`SUITE=stress` loops the shutdown and engine cases, `WORKERS="1 4"` runs every
+program at both worker counts. `build/test/tester --overwrite <tests>` records
+new goldens. Windows uses `scripts/test.ps1` with the same choices;
+`-Flags -d:nimIoringWsaPoll` selects its fallback.
 Tests and compiler caches stay in ignored `build/` directories.
 
 Handles retain one resource state. Aliases share ownership. One reader and one
@@ -50,8 +61,8 @@ Platform errors and unavailable checks are kept explicit.
 `fill(reader)` or `consume(reader, count)`. Pointer overloads are for low-level
 callers that manage this lifetime themselves. `readExactly(reader, buffer)`
 returns `IoResult`, including bytes received before EOF or failure.
-Run `NIMONY=build/toolchain/bin/nimony scripts/test-contracts.sh` to check that
-invalid borrows and managed channel payloads are rejected by the compiler.
+`tests/contracts` checks that the compiler rejects invalid borrows and managed
+channel payloads.
 
 `retainTransport(owner)` builds a transport from the owner's `recvInto`,
 `sendFrom`, `halfClose`, `interrupt`, `retire`, `dispose` and `canTransfer`
