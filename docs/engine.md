@@ -376,6 +376,33 @@ handshakes, and running relays finish on their own. `acceptEach` ends when
 `closeAdmission` closes the listener. zal-socks' `proxy.nim` has this shape
 with SOCKS5 on top and stops its datagram engine after `waitQuiet`.
 
+## Outbound connections as a policy
+
+A proxy learns a destination and connects to it. Where that connection
+leaves from is a policy the embedding program picks, so a server holds a
+`Dialer` and asks it:
+
+```nim
+var direct = DirectDialer(noDelay: true, timeoutMs: 10_000, device: "eth1", mark: 0)
+server.useDialer dialer(addr direct)
+
+let d = dialer(addr direct)
+let got = dialStream(d, destination, deadline, stop)
+if got.fd < 0: refuse(got.code)
+```
+
+`DirectDialer` connects from this machine: it resolves names, tries each
+address within one budget, and can bind the socket to an interface or set a
+Linux routing mark before the SYN. A `Dialer` is a context pointer and a
+passive proc, so a library whose protocol reaches destinations through a
+server of its own offers a dialer too, built on another dialer that reaches
+that server. That is how outbounds chain. `tests/server/tdialer.nim` in
+zal-socks shows a dialer written by hand.
+
+A zeroed `Dialer` is unset (`isSet` is false). zal-socks and zal-ss connect
+with `dialEndpointInline` in that case, which saves one passive frame per
+connection. A dial is never on the per-read path.
+
 ## Errors
 
 Engine-tier operations return codes and do not raise:

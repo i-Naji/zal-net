@@ -64,6 +64,10 @@ export relay
 import zal_net/engine/service
 export service
 
+# Outbound connections as a policy a server holds.
+import zal_net/engine/dial
+export dial
+
 # The datagram engine
 import zal_net/datagram
 export datagram

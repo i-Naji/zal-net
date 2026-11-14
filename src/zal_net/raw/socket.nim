@@ -349,6 +349,39 @@ proc startConnect*(sa: ptr SockAddrBuf; noDelay: bool; pending: var bool): cint 
   var error = 0
   result = startConnect(sa, noDelay, pending, error)
 
+type ConnectPrepare* = proc (fd: cint; context: pointer): bool {.nimcall.}
+  ## Called on a fresh socket before its SYN goes out, which is the only
+  ## moment an interface binding or a routing mark can take effect. False
+  ## abandons the attempt.
+
+proc startConnect*(sa: ptr SockAddrBuf; noDelay: bool; pending: var bool; error: var int;
+                   prepare: ConnectPrepare; context: pointer): cint =
+  ## As `startConnect`, with `prepare(fd, context)` run before the connect.
+  pending = false
+  error = 0
+  let fd = socket(cint(sa.ss.ss_family), SOCK_STREAM, 0)
+  if fd < 0:
+    error = -int(osLastError())
+    return -1
+  if cint(sa.ss.ss_family) == AF_INET6: setV6only(fd, 0)
+  setNonblock(fd)
+  tuneTcp(fd, noDelay)
+  if not prepare(fd, context):
+    error = -int(osLastError())
+    if error == 0: error = InvalidInput
+    discard closeRaw(fd)
+    return -1
+  while true:
+    if connectSocket(fd, addr sa.ss, sa.len) == 0: return fd
+    let err = int(osLastError())
+    if err == EIntr: continue
+    if err == EInProgress:
+      pending = true
+      return fd
+    error = -err
+    discard closeRaw(fd)
+    return -1
+
 template getsockname(fd: cint; sa: pointer; len: ptr cuint): cint = sockGetsockname(fd, sa, len)
 
 proc localPort*(fd: cint): uint16 =
