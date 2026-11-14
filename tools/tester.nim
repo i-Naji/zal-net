@@ -345,7 +345,9 @@ proc main() =
 
   let common = argsFrom("tests" / "tester.args")
   var c = Counters(passed: 0, failed: 0, skipped: 0, known: 0)
-  for test in tests: testOne(o, c, test, common)
+  for test in tests:
+    testOne(o, c, test, common)
+    flushFile(stdout)   # a lane that tails the log sees each verdict as it lands
   echo c.passed, " passed, ", c.failed, " failed, ", c.skipped, " skipped",
     (if c.known > 0: ", " & $c.known & " known compiler cases" else: "")
   quit(if c.failed == 0: 0 else: 1)
