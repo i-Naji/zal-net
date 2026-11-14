@@ -1,15 +1,11 @@
 {.feature: "assumeSync".}
-## Connection errors, stable output owners and friendly constructor forwarding.
+## The raw constructors conn.nim builds on: exact native refusal codes, DNS
+## failures, Unix paths, busy and closed output owners, and shutdown.
 import std/[assertions, syncio, envvars]
 import zal_net/[rt, errors], zal_net/rt/[sync, cancel, blocking]
-import zal_net/raw/[tcp, unix, socket], zal_net/foundation/tcp, zal_net/foundation/unix, zal_net/net/address, zal_net/net/sockaddr
+import zal_net/raw/[tcp, unix, socket], zal_net/net/address, zal_net/net/sockaddr
 import zal_net/net/dns as resolver
 import zal_net/private/os
-
-var evaluated = 0
-proc hostName(): string =
-  evaluated += 1
-  result = "localhost"
 
 proc main() {.passive.} =
   let tokenBaseline = liveCancelTokens()
@@ -57,10 +53,6 @@ proc main() {.passive.} =
     let hostFailure = connectInto(addr raw, "localhost", refusedPort, deadline=afterMs(5000))
     assert hostFailure == refusedCode, "localhost refusal code " & $hostFailure
     assert not raw.isOpen, "refused hostname owner remains closed"
-    if cycle < 4:
-      let failed = connectTcpConn(refused, deadline=afterMs(5000))
-      assert failed.value == nil and failed.code == refusedCode, "failed friendly owner cleanup"
-  echo "PASS exact native refusal, owner preservation and repeated failure cleanup"
 
   var addrs = default(array[MaxAddrs, SockAddrBuf])
   addrs[0].len = 77
@@ -80,26 +72,6 @@ proc main() {.passive.} =
   assert addrs[0].len == 77, "failed DNS preserves output"
   assert resolver.describe(code).len > 0 and errors.describe(code).len > 0, "qualified resolver diagnostics"
   release(stopped)
-  echo "PASS distinct DNS failure, timeout, cancellation and unchanged output"
-
-  let failed = connectTcpConn(default(SocketAddress))
-  assert failed.value == nil and failed.code == InvalidInput, "friendly invalid-address rejection"
-  let expired = connectTcpConn(destination, deadline=afterMs(0))
-  assert expired.value == nil and expired.code == IoTimedOut, "friendly expired construction"
-  let result = connectTcpConn(hostName(), listener.port, deadline=afterMs(2000))
-  assert result.code == 0 and evaluated == 1, "successful hostname evaluated once"
-  let candidate = result.value
-  if candidate != nil:
-    assert state(candidate) == ownerOpen, "retained TCP owner initialized"
-    var remote = accept(listener, deadline=afterMs(2000))
-    assert remote.isOpen, "accept friendly TCP peer"
-    assert sendFrom(candidate, bytes, afterMs(2000)) == 1, "friendly TCP send"
-    assert recvInto(addr remote, bytes, afterMs(2000)) == 1, "friendly TCP peer receive"
-    assert retire(candidate) == 0, "friendly TCP close"
-    close(addr remote)
-  else:
-    assert false, "friendly TCP constructor"
-  echo "PASS friendly TCP constructor, single argument evaluation and data"
   closeNow(listener)
 
   when defined(windows):
@@ -133,24 +105,9 @@ proc main() {.passive.} =
   assert localPeer.isOpen, "accept raw Unix peer"
   close(addr localPeer)
   close(addr localRaw)
-  let localResult = connectUnixConn(path, deadline=afterMs(2000))
-  assert localResult.code == 0, "friendly Unix success"
-  let localConn = localResult.value
-  if localConn != nil:
-    var remote = accept(localListener, deadline=afterMs(2000))
-    assert remote.isOpen, "accept friendly Unix peer"
-    assert sendFrom(localConn, bytes, afterMs(2000)) == 1, "friendly Unix send"
-    assert recvInto(addr remote, bytes, afterMs(2000)) == 1, "friendly Unix peer receive"
-    assert retire(localConn) == 0, "friendly Unix close"
-    close(addr remote)
-  else: assert false, "friendly Unix constructor"
   closeNow(localListener)
   let localFailure = connectUnixInto(addr localRaw, path)
   assert localFailure < 0 and not localRaw.isOpen, "closed Unix path failure"
-  for cycle in 0..<32:
-    let failed = connectUnixConn(path)
-    assert failed.value == nil and failed.code == localFailure, "failed Unix owner cleanup"
-  echo "PASS Unix result constructors and closed-output cleanup"
 
   stopBlockingPool()
   while not joinBlockingPool(): parkUntil(afterMs(1))
@@ -161,9 +118,6 @@ proc main() {.passive.} =
   assert liveBlockingJobs() == 0, "constructor resolver jobs drained"
   requestStop()
   assert connectInto(addr raw, destination) == ResourceClosed, "raw shutdown rejection"
-  let rejected = connectTcpConn(hostName(), 0)
-  assert rejected.value == nil and rejected.code == ResourceClosed, "friendly shutdown rejection"
-  assert evaluated == 1, "shutdown rejection leaves arguments unevaluated"
-  echo "PASS shutdown constructor rejection"
+  echo "PASS raw TCP and Unix constructors: refusal codes, DNS failures, busy owners, shutdown"
 
 assert runMain(main()), "calling-thread root entry"

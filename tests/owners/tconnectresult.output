@@ -1,5 +1,0 @@
-PASS exact native refusal, owner preservation and repeated failure cleanup
-PASS distinct DNS failure, timeout, cancellation and unchanged output
-PASS friendly TCP constructor, single argument evaluation and data
-PASS Unix result constructors and closed-output cleanup
-PASS shutdown constructor rejection

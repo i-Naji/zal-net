@@ -1,0 +1,1 @@
+PASS readLine across lengths, LF, CRLF, no line end, a NUL and the end

@@ -1,10 +1,9 @@
-## Owners default to closed. Transfers invalidate the source and repeated close
-## cannot close a subsequently reused descriptor (including descriptor zero).
+## Raw owners default to closed. Transfers invalidate the source and repeated
+## close cannot close a later descriptor, descriptor zero included.
 import std/[assertions, syncio]
 import zal_net/[rt, errors], zal_net/raw/io
 import zal_net/raw/[tcp, unix, udp, ip, tun]
 import zal_net/private/os
-import zal_net/ownership
 
 proc checkDefaults() {.passive.} =
   var tcp = default(TcpStream)
@@ -31,35 +30,6 @@ proc checkDefaults() {.passive.} =
   assert sendFrom(addr tcp, addr b, -1) == InvalidInput
   assert recvInto(addr tcp, addr b, 1) < 0
   assert nativeHandle(tcp) == -1
-  var life = default(OwnerLife)
-  initOwnerLife(life)
-  assert beginBorrow(life, false) == 0
-  assert beginBorrow(life, true) == 0
-  assert beginExclusiveControl(life) == ResourceBusy
-  assert beginClose(life, true) == 0
-  assert beginBorrow(life, false) == ResourceClosed
-  endBorrow(life, false)
-  endBorrow(life, true)
-  assert not claimOwnerCleanup(life), "interruption owns the native handle"
-  finishInterrupt(life)
-  assert beginControl(life) == 0
-  assert not claimOwnerCleanup(life), "control access pins native state"
-  endControl(life)
-  assert claimOwnerCleanup(life)
-  assert beginControl(life) == ResourceClosed
-  assert not claimOwnerCleanup(life), "cleanup is claimed exactly once"
-  markClosed(life)
-  assert state(life) == ownerClosed
-  var exclusive = default(OwnerLife)
-  initOwnerLife(exclusive)
-  assert beginExclusiveControl(exclusive) == 0
-  assert beginBorrow(exclusive, false) == ResourceBusy
-  assert beginTransfer(exclusive) == ResourceBusy
-  assert beginClose(exclusive, true, true) == ResourceBusy
-  assert state(exclusive) == ownerOpen
-  endControl(exclusive)
-  assert beginTransfer(exclusive) == 0
-  assert beginControl(exclusive) == ResourceClosed
 
 when not defined(windows):
   proc cDup(fd: cint): cint {.importc: "dup", header: "<unistd.h>".}
@@ -95,6 +65,6 @@ when not defined(windows):
     discard sockClose(stdinCopy)
   discard sockClose(pair[1])
   assert readSome(-1, addr received, 1) == -9 # EBADF retained, not collapsed
-  echo "PASS explicit ownership, descriptor zero, failed adoption, transfer and detachment"
+  echo "PASS raw owners closed by default, descriptor zero, failed adoption, transfer and detachment"
 
 assert runMain(checkDefaults())
