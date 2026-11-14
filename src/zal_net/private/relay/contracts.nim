@@ -40,23 +40,23 @@ type
     ## 0 more bytes needed, InFail); `seal` frames d.spans in place into
     ## one region d.wOff ..< d.wEnd.
     geometry*: Geometry
-    open*: proc (c: Relay; d: DirectionPtr): int {.nimcall.}
+    open*: proc (r: Relay; d: DirectionPtr): int {.nimcall.}
     sourceEnded*: nil proc (d: DirectionPtr): bool {.nimcall.}
       ## Protocol EOF known without another read; nil when only the transport can end.
     atBoundary*: proc (d: DirectionPtr): bool {.nimcall.}  # may the stream end here
-    seal*: proc (c: Relay; d: DirectionPtr): bool {.nimcall.}
+    seal*: proc (r: Relay; d: DirectionPtr): bool {.nimcall.}
     closeSource*: proc (d: DirectionPtr) {.nimcall.}
     closeSink*: proc (d: DirectionPtr) {.nimcall.}
-    finish*: nil proc (c: Relay; d: DirectionPtr): bool {.nimcall.}
+    finish*: nil proc (r: Relay; d: DirectionPtr): bool {.nimcall.}
       ## A sink's end of stream (nil: none): called once when the
       ## direction's source ended cleanly, before the half-close; it may put
       ## a closing record in `d.pre`. False fails the direction.
-    readFailed*: nil proc (c: Relay; d: DirectionPtr; err: int): int {.nimcall.}
+    readFailed*: nil proc (r: Relay; d: DirectionPtr; err: int): int {.nimcall.}
       ## A source's read failed hard with `err` (errno; nil: the direction
       ## fails). It may read what is pending itself (a kTLS control record
       ## after EIO), even into d.buf at d.fill: InAgain retries (open, then
       ## read), InEof ends cleanly, InFail fails.
-    writePrefix*: nil proc (c: Relay; d: DirectionPtr): int {.nimcall.}
+    writePrefix*: nil proc (r: Relay; d: DirectionPtr): int {.nimcall.}
       ## A sink that writes `d.pre[d.preAt ..< d.preLen]` itself (nil: one
       ## writev with the region), advancing `preAt`: 1 when all is out,
       ## InAgain to wait until writable and be called again, InFail.
@@ -71,8 +71,8 @@ type
 
   RelayHooks* = object
     ## A framework's view of its connections; either may be nil.
-    onBatch*: nil proc (c: Relay; d: DirectionPtr; bytes: int) {.nimcall.}  ## after each batch
-    onEnd*: nil proc (c: Relay) {.nimcall.}   ## once, before the descriptors close
+    onBatch*: nil proc (r: Relay; d: DirectionPtr; bytes: int) {.nimcall.}  ## after each batch
+    onEnd*: nil proc (r: Relay) {.nimcall.}   ## once, before the descriptors close
 
   Dir* = object
     src*, dst*: cint
@@ -124,13 +124,13 @@ proc sinkState*[T](d: DirectionPtr): ptr T {.inline.} =
   ## Same contract as sourceState; valid only during the framer callback.
   result = storageAs(d.dstSt, T)
 
-proc protocolState*[T](c: Relay): ptr T {.inline.} =
+proc protocolState*[T](r: Relay): ptr T {.inline.} =
   ## Plain protocol state, owned until freeRelay. Zeroed before reuse.
-  result = storageAs(c.proto, T)
+  result = storageAs(r.proto, T)
 
-proc extensionState*[T](c: Relay): ptr T {.inline.} =
+proc extensionState*[T](r: Relay): ptr T {.inline.} =
   ## Plain caller state; the end hook must release any owned resources.
-  result = storageAs(c.ext, T)
+  result = storageAs(r.ext, T)
 
 
 type PumpFailure = enum

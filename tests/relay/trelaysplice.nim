@@ -60,8 +60,8 @@ proc tcpPair(outer, inner: var cint) {.passive.} =
   inner = takeNativeHandle(addr sv)
   closeNow(l)
 
-proc runRelay(c: Relay) {.passive.} =
-  startPumps(c)
+proc runRelay(r: Relay) {.passive.} =
+  startPumps(r)
 
 proc main() {.passive.} =
   let base = liveConnections()
@@ -71,16 +71,16 @@ proc main() {.passive.} =
   var r2: cint = -1
   tcpPair(o1, r1)
   tcpPair(o2, r2)
-  let c = newRelay(5000)
-  if c == nil: quit "trelaysplice: no connection block"
-  c.fd = r1
-  c.up = r2
-  c.a.src = r1
-  c.a.dst = r2
-  c.b.src = r2
-  c.b.dst = r1
+  let r = newRelay(5000)
+  if r == nil: quit "trelaysplice: no connection block"
+  r.fd = r1
+  r.up = r2
+  r.a.src = r1
+  r.a.dst = r2
+  r.b.src = r2
+  r.b.dst = r1
   when defined(linux) and defined(nnStreamFaultTest): rejectOutput()
-  spawnTask runRelay(c)
+  spawnTask runRelay(r)
   spawnTask writePlain(o1, 5)
   spawnTask readPlain(o2, 5)
   spawnTask writePlain(o2, 9)

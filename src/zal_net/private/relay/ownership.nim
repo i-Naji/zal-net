@@ -6,8 +6,8 @@
 proc mapBlock(): nil Relay =
   result = cast[nil Relay](mapAnon(sizeof(RelayObj)))
 
-proc unmapBlock(c: Relay) =
-  unmapAnon(c, sizeof(RelayObj))
+proc unmapBlock(r: Relay) =
+  unmapAnon(r, sizeof(RelayObj))
 
 var poolLock: Lock
 var poolHead: nil Relay
@@ -141,13 +141,13 @@ proc takeBlock(maxConns: int): nil Relay =
     return nil
   # Reserve admission before mapping, so simultaneous accepts cannot exceed it.
   discard atomicFetchAdd(liveConns, 1, moRelaxed)
-  let c = poolHead
-  if c != nil:
-    poolHead = c.poolNext
+  let r = poolHead
+  if r != nil:
+    poolHead = r.poolNext
     poolLen = poolLen - 1
   release(poolLock)
-  result = c
-  if c == nil:
+  result = r
+  if r == nil:
     result = mapBlock()
     if result == nil: discard atomicFetchSub(liveConns, 1, moRelease)
 
@@ -194,26 +194,26 @@ proc newRelay*(timeoutMs: int; maxConns = 0; payloadIdleMs = 30_000): nil Relay 
   ## Nil also reports shutdown; the caller still owns its accepted socket.
   ## payloadIdleMs (default 30 seconds) reclaims empty directions independently
   ## of the connection timeout; nonpositive values disable idle reclamation.
-  let c = takeBlock(maxConns)
-  if c == nil: return nil
-  c.refs = 0
-  c.lastIo = 0
-  c.timeoutMs = timeoutMs
-  c.payloadIdleMs = max(0, payloadIdleMs)
-  c.fd = -1
-  c.up = -1
-  c.poolNext = nil
-  c.hooks = nil
-  c.endReason = erEof
-  c.upBytes = 0
-  c.downBytes = 0
-  c.failed = false
-  zeroMem(addr c.proto[0], sizeof(c.proto))
-  zeroMem(addr c.ext[0], sizeof(c.ext))
-  initDir(addr c.a)
-  initDir(addr c.b)
-  touchIo(addr c.lastIo)
-  result = c
+  let r = takeBlock(maxConns)
+  if r == nil: return nil
+  r.refs = 0
+  r.lastIo = 0
+  r.timeoutMs = timeoutMs
+  r.payloadIdleMs = max(0, payloadIdleMs)
+  r.fd = -1
+  r.up = -1
+  r.poolNext = nil
+  r.hooks = nil
+  r.endReason = erEof
+  r.upBytes = 0
+  r.downBytes = 0
+  r.failed = false
+  zeroMem(addr r.proto[0], sizeof(r.proto))
+  zeroMem(addr r.ext[0], sizeof(r.ext))
+  initDir(addr r.a)
+  initDir(addr r.b)
+  touchIo(addr r.lastIo)
+  result = r
 
 proc closeFramers(d: DirectionPtr) =
   let s = d.srcFramer
@@ -231,22 +231,22 @@ proc closeFramers(d: DirectionPtr) =
   d.relayout = false
   d.sinkInAlt = false
 
-proc freeRelay*(c: Relay) =
+proc freeRelay*(r: Relay) =
   ## Framer close hooks, then back to the pool. Descriptors are the caller's.
-  closeFramers(addr c.a)
-  closeFramers(addr c.b)
-  releasePayload(addr c.a)
-  releasePayload(addr c.b)
-  zeroMem(addr c.proto[0], sizeof(c.proto))
-  zeroMem(addr c.ext[0], sizeof(c.ext))
+  closeFramers(addr r.a)
+  closeFramers(addr r.b)
+  releasePayload(addr r.a)
+  releasePayload(addr r.b)
+  zeroMem(addr r.proto[0], sizeof(r.proto))
+  zeroMem(addr r.ext[0], sizeof(r.ext))
   acquire(poolLock)
   let keep = not poolClosing and poolLen < PoolMax
   if keep:
-    c.poolNext = poolHead
-    poolHead = c
+    r.poolNext = poolHead
+    poolHead = r
     poolLen = poolLen + 1
   release(poolLock)
-  if not keep: unmapBlock(c)
+  if not keep: unmapBlock(r)
   discard atomicFetchSub(liveConns, 1, moRelease)
 
 proc stopRelayPool*(): bool =
@@ -257,10 +257,10 @@ proc stopRelayPool*(): bool =
   acquire(poolLock)
   poolClosing = true
   while poolHead != nil:
-    let c = poolHead
-    if c == nil: break
-    poolHead = c.poolNext
-    unmapBlock(c)
+    let r = poolHead
+    if r == nil: break
+    poolHead = r.poolNext
+    unmapBlock(r)
   poolLen = 0
   while payloadPoolLen > 0:
     payloadPoolLen = payloadPoolLen - 1
@@ -276,29 +276,29 @@ proc stopRelayPool*(): bool =
   result = atomicLoad(liveConns, moAcquire) == 0 and atomicLoad(liveAlts, moAcquire) == 0 and atomicLoad(livePayloads, moAcquire) == 0
   release(poolLock)
 
-proc runEnd(c: Relay) {.inline.} =
-  let h = c.hooks
+proc runEnd(r: Relay) {.inline.} =
+  let h = r.hooks
   if h != nil:
     let e = h.onEnd
-    if e != nil: e(c)
+    if e != nil: e(r)
 
-proc failRelay*(c: Relay; why: string) =
+proc failRelay*(r: Relay; why: string) =
   ## A handshake failure, before any pump runs: reset rather than FIN.
-  when defined(nnTraceRelay): stderr.writeLine("fail " & $c.fd & " " & why)
+  when defined(nnTraceRelay): stderr.writeLine("fail " & $r.fd & " " & why)
   else: discard why
-  c.endReason = erRejected
-  runEnd(c)
-  if c.fd >= 0: lingerRst(c.fd)
-  if c.up >= 0: closeFd(c.up)
-  freeRelay(c)
+  r.endReason = erRejected
+  runEnd(r)
+  if r.fd >= 0: lingerRst(r.fd)
+  if r.up >= 0: closeFd(r.up)
+  freeRelay(r)
 
-proc closeRelay*(c: Relay) =
+proc closeRelay*(r: Relay) =
   ## Before any pump runs, after a protocol reply: FIN, so the peer reads
   ## the reply.
-  runEnd(c)
-  if c.fd >= 0: closeFd(c.fd)
-  if c.up >= 0: closeFd(c.up)
-  freeRelay(c)
+  runEnd(r)
+  if r.fd >= 0: closeFd(r.fd)
+  if r.up >= 0: closeFd(r.up)
+  freeRelay(r)
 
 const FailPollMs = 200   ## Windows, std backend: how often a parked pump looks for a failure
 const ErrorProbeMs = 10  ## Linux epoll: first look for a socket error, doubling to a second
@@ -313,26 +313,26 @@ proc peekInput(fd: cint): int =
     if err == EIntr: continue
     return (if err == EAgain: IoAgain else: -err)
 
-template relayPark(c: Relay; fd: cint; events: IoEvents; res: var int) =
+template relayPark(r: Relay; fd: cint; events: IoEvents; res: var int) =
   ## A pump's park (`parkReady` on the connection's idle stamp). On Windows
   ## with the std backend nothing wakes a parked task when the other
   ## direction fails (no shutdown hook there, no abort, and a FIN is not
-  ## allowed): the park looks at `c.failed` every `FailPollMs` instead.
+  ## allowed): the park looks at `r.failed` every `FailPollMs` instead.
   when defined(windows):
     block:
       while true:
-        parkPoll(fd, events, earlier(ioDeadline(addr c.lastIo, c.timeoutMs), afterMs(FailPollMs)), res)
+        parkPoll(fd, events, earlier(ioDeadline(addr r.lastIo, r.timeoutMs), afterMs(FailPollMs)), res)
         if res > 0: break
         if res == IoTimedOut:
-          if atomicLoad(c.failed, moAcquire):
+          if atomicLoad(r.failed, moAcquire):
             res = ECancelled
             break
-          if monoNow() >= ioDeadline(addr c.lastIo, c.timeoutMs): break
+          if monoNow() >= ioDeadline(addr r.lastIo, r.timeoutMs): break
         elif not transientIo(res): break
   else:
-    parkReady(fd, events, addr c.lastIo, c.timeoutMs, res)
+    parkReady(fd, events, addr r.lastIo, r.timeoutMs, res)
 
-template relayReadPark(c: Relay; d: DirectionPtr; res: var int) =
+template relayReadPark(r: Relay; d: DirectionPtr; res: var int) =
   ## Idle payload reclamation has its own deadline. It neither consumes input
   ## nor ends the connection. Descriptor readiness holds no buffer address.
   block:
@@ -340,12 +340,12 @@ template relayReadPark(c: Relay; d: DirectionPtr; res: var int) =
       var probeMs = ErrorProbeMs
     while true:
       let now = monoNow()
-      let connectionDeadline = ioDeadline(addr c.lastIo, c.timeoutMs)
+      let connectionDeadline = ioDeadline(addr r.lastIo, r.timeoutMs)
       var payloadDeadline = never
       let a = d.alt
-      if c.payloadIdleMs > 0 and canReclaim(d) and
+      if r.payloadIdleMs > 0 and canReclaim(d) and
          (hasPayload(d) or (a != nil and hasPayload(a))):
-        payloadDeadline = ioDeadline(addr c.lastIo, c.payloadIdleMs)
+        payloadDeadline = ioDeadline(addr r.lastIo, r.payloadIdleMs)
         if now >= payloadDeadline:
           reclaimPayload(d)
           payloadDeadline = never
@@ -357,7 +357,7 @@ template relayReadPark(c: Relay; d: DirectionPtr; res: var int) =
       parkPoll(d.src, {evRead}, deadline, res)
       if res > 0: break
       if res == IoTimedOut:
-        if atomicLoad(c.failed, moAcquire):
+        if atomicLoad(r.failed, moAcquire):
           res = ECancelled
           break
         when defined(linux) and defined(nimIoringNoUring):
@@ -369,10 +369,10 @@ template relayReadPark(c: Relay; d: DirectionPtr; res: var int) =
             break
           probeMs = min(probeMs * 2, 1000)
         # Either deadline may have moved while the other pump made progress.
-        if monoNow() >= ioDeadline(addr c.lastIo, c.timeoutMs): break
+        if monoNow() >= ioDeadline(addr r.lastIo, r.timeoutMs): break
       elif not transientIo(res): break
 
-proc failStreams(c: Relay; d: DirectionPtr; reason: EndReason) =
+proc failStreams(r: Relay; d: DirectionPtr; reason: EndReason) =
   ## A direction failed: the connection fails, once. Neither peer may read
   ## a clean end of a stream cut short, the other direction's included
   ## (it stops here too): both sockets reset, and nothing else goes out (no
@@ -384,12 +384,12 @@ proc failStreams(c: Relay; d: DirectionPtr; reason: EndReason) =
   ## wakes on its peer's error, `relayPark`'s look or its idle timeout. Its
   ## end of stream then counts as this failure.
   var was = false
-  if not atomicCompareExchange(c.failed, was, true, moAcquireRelease, moAcquire): return
-  c.endReason = reason  # only the failure-claim winner writes this field
+  if not atomicCompareExchange(r.failed, was, true, moAcquireRelease, moAcquire): return
+  r.endReason = reason  # only the failure-claim winner writes this field
   for fd in [d.src, d.dst]:
     if not abortSocket(fd): shutdownRead(fd)
 
-proc finishDir(c: Relay; d: DirectionPtr; graceful: bool; why = pfNone; code = 0) =
+proc finishDir(r: Relay; d: DirectionPtr; graceful: bool; why = pfNone; code = 0) =
   ## Clean EOF propagates as a half-close (not after a failure). A failure
   ## fails the connection (`failStreams`); descriptors stay open until the
   ## other pump has finished. `why`/`code` say what ended a failed direction.
@@ -397,13 +397,13 @@ proc finishDir(c: Relay; d: DirectionPtr; graceful: bool; why = pfNone; code = 0
     stderr.writeLine("finish " & $d.src & " -> " & $d.dst & " graceful " & $graceful &
                      " why " & $why & " code " & $code)
   if graceful:
-    if not atomicLoad(c.failed, moAcquire): shutdownWrite(d.dst)
+    if not atomicLoad(r.failed, moAcquire): shutdownWrite(d.dst)
   else:
     let reason = if (why == pfReadWait or why == pfWriteWait) and code == IoTimedOut: erIdle else: erError
-    failStreams(c, d, reason)
-  if atomicFetchSub(c.refs, 1, moAcquireRelease) == 1:
-    runEnd(c)
-    closeFd(c.fd)
-    closeFd(c.up)
-    freeRelay(c)
+    failStreams(r, d, reason)
+  if atomicFetchSub(r.refs, 1, moAcquireRelease) == 1:
+    runEnd(r)
+    closeFd(r.fd)
+    closeFd(r.up)
+    freeRelay(r)
 

@@ -31,10 +31,10 @@
 #     # ... parse the request into `dest`, read again while it is short ...
 #     var up: cint = -1
 #     dialEndpointInline(dest, s.noDelay, s.dialMs, up, never, s.stop)
-#     let c = newRelay(s.idleMs, s.maxRelays)
-#     c.fd = fd; c.up = up
-#     c.a.src = fd; c.a.dst = up; c.b.src = up; c.b.dst = fd
-#     startPumps(c)
+#     let r = newRelay(s.idleMs, s.maxRelays)
+#     r.fd = fd; r.up = up
+#     r.a.src = fd; r.a.dst = up; r.b.src = up; r.b.dst = fd
+#     startPumps(r)
 #
 #   proc acceptLoop(fd: cint; s: sink SocksServer) {.passive.} =
 #     acceptEach(fd):

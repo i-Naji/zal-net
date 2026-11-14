@@ -5,12 +5,12 @@ import zal_net/raw/socket
 import zal_net/relay
 
 var endings: int
-proc ended(c: Relay) =
-  assert c.endReason == erEof or (defined(nnRelayFaultTest) and c.endReason == erError)
+proc ended(r: Relay) =
+  assert r.endReason == erEof or (defined(nnRelayFaultTest) and r.endReason == erError)
   discard atomicFetchAdd(endings, 1, moRelease)
 let hooks = RelayHooks(onEnd: ended)
 
-proc run(c: Relay) {.passive.} = startPumps(c)
+proc run(r: Relay) {.passive.} = startPumps(r)
 proc made(left, right: cint; framed: nil Framer = nil): Relay =
   let candidate = newRelay(2000, payloadIdleMs=20)
   assert candidate != nil
@@ -31,7 +31,7 @@ proc emptyBuffers() {.passive.} =
     assert monoNow() < deadline, "idle payload did not reclaim"
     parkUntil(afterMs(1))
 
-proc frameOpen(c: Relay; d: DirectionPtr): int =
+proc frameOpen(r: Relay; d: DirectionPtr): int =
   if d.fill - d.off < 2: return 0
   let size = int(d.buf[d.off])
   if d.fill - d.off < size + 1: return 0
@@ -41,7 +41,7 @@ proc frameOpen(c: Relay; d: DirectionPtr): int =
   d.off = d.off + size + 1
   result = 1
 proc boundary(d: DirectionPtr): bool = d.off == d.fill
-proc seal(c: Relay; d: DirectionPtr): bool = false
+proc seal(r: Relay; d: DirectionPtr): bool = false
 proc noClose(d: DirectionPtr) = discard
 let fixtureFramer = FramerObj(geometry: Geometry(head: 1, maxRecord: 64),
   open: frameOpen, atBoundary: boundary, seal: seal, closeSource: noClose, closeSink: noClose)
@@ -83,8 +83,8 @@ proc main() {.passive.} =
     freeRelay(fresh)
   let (client, ingress) = openPair()
   let (egress, sink) = openPair()
-  let c = made(ingress, egress)
-  assert trySpawnTask(run(c))
+  let r = made(ingress, egress)
+  assert trySpawnTask(run(r))
   parkUntil(afterMs(30))
   assert liveConnections() == 1 and livePayloadBuffers() == 0, "idle accept has no payload"
   var data = default(array[8192, byte])

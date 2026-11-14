@@ -16,7 +16,7 @@ proc readRoom(d: DirectionPtr): int =
     d.fill = HeadRoom + n
   result = BufCap - d.fill
 
-proc ingestFramed(c: Relay; d: DirectionPtr; f: Framer; short: var bool): int {.noinline.} =
+proc ingestFramed(r: Relay; d: DirectionPtr; f: Framer; short: var bool): int {.noinline.} =
   ## Decode what is buffered (`f` is d.srcFramer); read more until a batch
   ## is ready. `short` says whether the last read left room.
   let ended = f.sourceEnded
@@ -29,12 +29,12 @@ proc ingestFramed(c: Relay; d: DirectionPtr; f: Framer; short: var bool): int {.
     # Allocate for hard errors too: readFailed may consume a kTLS control record.
     if not ensurePayload(d): return InFail
   while true:
-    let k = f.open(c, d)
+    let k = f.open(r, d)
     if k != 0: return k
     let room = readRoom(d)
     let n = readSome(d.src, bufAt(d, d.fill), room)
     if n > 0:
-      touchIo(addr c.lastIo)
+      touchIo(addr r.lastIo)
       d.fill = d.fill + n
       short = n < room
     elif n == IoAgain:
@@ -46,7 +46,7 @@ proc ingestFramed(c: Relay; d: DirectionPtr; f: Framer; short: var bool): int {.
       let err = lastErr()                        # before anything else can change it
       let rf = f.readFailed
       if rf == nil: return InFail
-      let k = rf(c, d, err)
+      let k = rf(r, d, err)
       if k != InAgain: return k
 
 proc drainedFramed(d: DirectionPtr; f: Framer): bool =
@@ -89,7 +89,7 @@ proc plainSpans(d: DirectionPtr; total: int) =
   d.nspans = i
   d.bytes = total
 
-proc ingestPlain(c: Relay; d: DirectionPtr): int {.noinline.} =
+proc ingestPlain(r: Relay; d: DirectionPtr): int {.noinline.} =
   ## readv scatters plaintext into record slots, leaving the sink's head
   ## and tail gaps, so a full batch is framed in place and written at once.
   if not hasPayload(d):
@@ -110,7 +110,7 @@ proc ingestPlain(c: Relay; d: DirectionPtr): int {.noinline.} =
       i = i + 1
     n = readvSome(d.src, addr d.iov[0], d.slotCount)
   if n > 0:
-    touchIo(addr c.lastIo)
+    touchIo(addr r.lastIo)
     plainSpans(d, n)
     return d.nspans
   if n == 0: return InEof
@@ -119,9 +119,9 @@ proc ingestPlain(c: Relay; d: DirectionPtr): int {.noinline.} =
 
 # ------------------------------------------------------------------- sink
 
-proc prepareEmit(c: Relay; d: DirectionPtr): bool {.noinline.} =
+proc prepareEmit(r: Relay; d: DirectionPtr): bool {.noinline.} =
   let f = d.dstFramer
-  if f != nil: return f.seal(c, d)
+  if f != nil: return f.seal(r, d)
   var i = 0
   while i < d.nspans:
     d.iov[i].iov_base = bufAt(d, d.spans[i].off)
@@ -146,14 +146,14 @@ proc advanceWritten(d: DirectionPtr; written: int) =
       d.iov[d.iovAt].iov_len = csize_t(l - left)
       left = 0
 
-proc emitSome(c: Relay; d: DirectionPtr): int {.noinline.} =
+proc emitSome(r: Relay; d: DirectionPtr): int {.noinline.} =
   ## 1: batch written; InAgain: park until writable; InFail: error.
   let sf = d.dstFramer
   if sf != nil:
     if d.preAt < d.preLen:
       let wp = sf.writePrefix
       if wp != nil:
-        let k = wp(c, d)
+        let k = wp(r, d)
         if k == InAgain: return InAgain
         if k < 0: return InFail
         d.preLen = 0
@@ -169,7 +169,7 @@ proc emitSome(c: Relay; d: DirectionPtr): int {.noinline.} =
         cnt = 2
       let n = writevSome(d.dst, addr d.iov[0], cnt)
       if n > 0:
-        touchIo(addr c.lastIo)
+        touchIo(addr r.lastIo)
         let p = min(n, d.preLen - d.preAt)
         d.preAt = d.preAt + p
         d.wOff = d.wOff + (n - p)
@@ -185,7 +185,7 @@ proc emitSome(c: Relay; d: DirectionPtr): int {.noinline.} =
     while d.wOff < d.wEnd:
       let n = writeSome(d.dst, bufAt(d, d.wOff), d.wEnd - d.wOff)
       if n > 0:
-        touchIo(addr c.lastIo)
+        touchIo(addr r.lastIo)
         d.wOff = d.wOff + n
       elif n == IoAgain:
         return InAgain
@@ -203,7 +203,7 @@ proc emitSome(c: Relay; d: DirectionPtr): int {.noinline.} =
       else:
         n = writevSome(d.dst, addr d.iov[d.iovAt], d.iovEnd - d.iovAt)
       if n > 0:
-        touchIo(addr c.lastIo)
+        touchIo(addr r.lastIo)
         advanceWritten(d, n)
       elif n == IoAgain:
         return InAgain
@@ -219,10 +219,10 @@ when defined(linux):
     SpliceMissing = 38                   # ENOSYS
     SplicePipe = 1 shl 20                # pipe size asked for, and bytes per splice
 
-  proc spliceable(c: Relay; d: DirectionPtr): bool {.inline.} =
+  proc spliceable(r: Relay; d: DirectionPtr): bool {.inline.} =
     ## Plain to plain, and no hook that looks at the batches.
     if d.srcFramer != nil or d.dstFramer != nil: return false
-    let h = c.hooks
+    let h = r.hooks
     result = h == nil or h.onBatch == nil
 
   proc pipeToSlots(d: DirectionPtr; pr: cint; held: var int): int =
@@ -245,7 +245,7 @@ when defined(linux):
     pr = -1
     pw = -1
 
-  template spliceDirection(c: Relay; d: DirectionPtr; pr, pw: cint; moved: ptr int64;
+  template spliceDirection(r: Relay; d: DirectionPtr; pr, pw: cint; moved: ptr int64;
                            held, sent, res: var int; graceful: var bool; why: var PumpFailure;
                            code: var int; done: var bool) =
     ## Socket to socket through the pipe until the source ends or something
@@ -264,11 +264,11 @@ when defined(linux):
             if n > 0:
               held = n
               drainedIn = n < SplicePipe
-              touchIo(addr c.lastIo)
+              touchIo(addr r.lastIo)
               continue
             if n == 0:
               done = true
-              if atomicLoad(c.failed, moAcquire): why = pfPeer
+              if atomicLoad(r.failed, moAcquire): why = pfPeer
               else: graceful = true
               break splicing
             let err = lastErr()
@@ -279,7 +279,7 @@ when defined(linux):
               code = -err
               break splicing
           sent = 0
-          relayReadPark(c, d, res)
+          relayReadPark(r, d, res)
           if res <= 0:
             done = true
             why = pfReadWait
@@ -291,7 +291,7 @@ when defined(linux):
           if k > 0:
             held = held - k
             fullOut = held > 0
-            touchIo(addr c.lastIo)
+            touchIo(addr r.lastIo)
             atomicStore(moved[], moved[] + k, moRelaxed)
             sent = sent + k
             if sent >= YieldBytes:
@@ -307,7 +307,7 @@ when defined(linux):
             break splicing
         fullOut = false
         sent = 0
-        relayPark(c, d.dst, {evWrite}, res)
+        relayPark(r, d.dst, {evWrite}, res)
         if res <= 0:
           done = true
           why = pfWriteWait
@@ -316,7 +316,7 @@ when defined(linux):
 
 # ------------------------------------------------------------------- pump
 
-proc pump*(c: Relay; d: DirectionPtr) {.passive.} =
+proc pump*(r: Relay; d: DirectionPtr) {.passive.} =
   ## One direction, start to finish, in a single passive frame. A batch
   ## already in d.spans (initial payload from a handshake) goes out first.
   var res = 0
@@ -332,7 +332,7 @@ proc pump*(c: Relay; d: DirectionPtr) {.passive.} =
   var pr: cint = -1        # the splice pipe, and what it holds
   var pw: cint = -1
   var held = 0
-  let moved = if d == addr c.a: addr c.upBytes else: addr c.downBytes
+  let moved = if d == addr r.a: addr r.upBytes else: addr r.downBytes
   block run:
     while true:
       when defined(linux):
@@ -343,7 +343,7 @@ proc pump*(c: Relay; d: DirectionPtr) {.passive.} =
             pr = p[0]
             pw = p[1]
             var done = false
-            spliceDirection(c, d, pr, pw, moved, held, sent, res, graceful, why, code, done)
+            spliceDirection(r, d, pr, pw, moved, held, sent, res, graceful, why, code, done)
             if done: break run
             if held == 0: closePipe(pr, pw)
           spliceOff = true                     # refused (or no pipe): user space from here
@@ -359,10 +359,10 @@ proc pump*(c: Relay; d: DirectionPtr) {.passive.} =
               why = pfFraming
               break run
           if drained: drained = false
-          elif f != nil: k = ingestFramed(c, d, f, short)
-          else: k = ingestPlain(c, d)
+          elif f != nil: k = ingestFramed(r, d, f, short)
+          else: k = ingestPlain(r, d)
           if k > 0: break
-          if k == InEof and atomicLoad(c.failed, moAcquire):
+          if k == InEof and atomicLoad(r.failed, moAcquire):
             why = pfPeer                              # woken by the other direction's failure
             break run
           if k == InEof:
@@ -376,17 +376,17 @@ proc pump*(c: Relay; d: DirectionPtr) {.passive.} =
                 # The sink's closing record, then the half-close.
                 e.wOff = 0
                 e.wEnd = 0
-                if not fin(c, e):
+                if not fin(r, e):
                   why = pfFraming
                   break run
                 while true:
-                  let w = emitSome(c, e)
+                  let w = emitSome(r, e)
                   if w > 0: break
                   if w != InAgain:
                     why = pfSink
                     code = w
                     break run
-                  relayPark(c, d.dst, {evWrite}, res)
+                  relayPark(r, d.dst, {evWrite}, res)
                   if res <= 0:
                     why = pfWriteWait
                     code = res
@@ -398,7 +398,7 @@ proc pump*(c: Relay; d: DirectionPtr) {.passive.} =
             code = k
             break run
           sent = 0
-          relayReadPark(c, d, res)
+          relayReadPark(r, d, res)
           if res <= 0:
             why = pfReadWait
             code = res
@@ -423,18 +423,18 @@ proc pump*(c: Relay; d: DirectionPtr) {.passive.} =
         if alt != nil:
           e = alt
           fillAlt(d, alt, si, so)
-        if not prepareEmit(c, e):
+        if not prepareEmit(r, e):
           why = pfFraming
           break run
         while true:
-          let w = emitSome(c, e)
+          let w = emitSome(r, e)
           if w > 0: break
           if w != InAgain:
             why = pfSink
             code = w
             break run
           sent = 0
-          relayPark(c, d.dst, {evWrite}, res)
+          relayPark(r, d.dst, {evWrite}, res)
           if res <= 0:
             why = pfWriteWait
             code = res
@@ -451,12 +451,12 @@ proc pump*(c: Relay; d: DirectionPtr) {.passive.} =
       else: drained = short and drainedFramed(d, sf)
       short = false
       when defined(linux):
-        spliceNext = not spliceOff and d.bytes >= d.slotMax and spliceable(c, d)
+        spliceNext = not spliceOff and d.bytes >= d.slotMax and spliceable(r, d)
       atomicStore(moved[], moved[] + d.bytes, moRelaxed)
-      let h = c.hooks
+      let h = r.hooks
       if h != nil:
         let ob = h.onBatch
-        if ob != nil: ob(c, d, d.bytes)
+        if ob != nil: ob(r, d, d.bytes)
       d.nspans = 0
       d.wOff = 0
       d.wEnd = 0
@@ -473,18 +473,18 @@ proc pump*(c: Relay; d: DirectionPtr) {.passive.} =
         sent = 0
         yieldNow()
   when defined(linux): closePipe(pr, pw)
-  finishDir(c, d, graceful, why, code)
+  finishDir(r, d, graceful, why, code)
 
-template startPumps*(c: Relay) =
+template startPumps*(r: Relay) =
   ## Lay out both directions, then run direction b as a new task on this
   ## loop while direction a continues in the caller's frame chain. A
   ## framer pair that cannot work together fails the connection.
-  if not layout(addr c.a) or not layout(addr c.b):
-    failRelay(c, "framer geometry")
+  if not layout(addr r.a) or not layout(addr r.b):
+    failRelay(r, "framer geometry")
   else:
-    c.refs = 2
-    if trySpawnTask(pump(c, addr c.b)):
-      pump(c, addr c.a)
+    r.refs = 2
+    if trySpawnTask(pump(r, addr r.b)):
+      pump(r, addr r.a)
     else:
-      c.refs = 0
-      failRelay(c, "runtime shutdown")
+      r.refs = 0
+      failRelay(r, "runtime shutdown")
