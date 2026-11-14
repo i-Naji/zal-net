@@ -19,6 +19,9 @@ const
   DnsNoAddresses* = NetErrorBase - 13
   DnsErrorBase* = -150_000
   DnsErrorRadius* = 30_000       ## signed native getaddrinfo codes, separate from errno
+  LayerErrorBase* = -200_000
+  LayerErrorSpan* = 100_000      ## codes of a layer on a `Conn` (TLS uses the first 2000);
+                                 ## a read or write that returns one raises `ProtocolError`
 
 proc describe*(code: int): string =
   ## Allocate a diagnostic only on demand. Numeric OS errors stay intact;

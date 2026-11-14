@@ -53,6 +53,8 @@ proc errorKind*(code: int): ErrorCode =
         result = posixToErrorCode(int32(-code))
         if result == Success:
           result = IOError
+    elif code <= LayerErrorBase and code > LayerErrorBase - LayerErrorSpan:
+      result = ProtocolError
     else:
       result = IOError
 
