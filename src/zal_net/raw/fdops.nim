@@ -2,8 +2,8 @@ import zal_net/buffers
 import zal_net/errors
 export dataPtr
 ## The operations every byte stream shares (TCP, Unix-domain), over a
-## descriptor and an idle limit. `net/tcp` and `net/unix` wrap them per
-## type; use those.
+## descriptor and an idle limit. `zal_net/conn` wraps them for `Conn`; use
+## that.
 
 import std/oserrors
 import zal_net/rt
