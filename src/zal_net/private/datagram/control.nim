@@ -1,5 +1,5 @@
 ## Included by datagram/engine; control.
-proc unbind(l: ptr Listener) =
+proc unbind(l: ptr DatagramListener) =
   let old = l.kind
   if old != nil:
     let hook = old.unbindListener
@@ -128,7 +128,7 @@ proc removeInbound(e: ptr DatagramEngine; slot: int) =
     i = i + 1
   unbind(ib)
   closeEngineFd(e, ib.fd)
-  ib[] = default(Listener)
+  ib[] = default(DatagramListener)
   ib.fd = -1
 
 proc handleMsg(e: ptr DatagramEngine; m: ptr EngineMsg) =

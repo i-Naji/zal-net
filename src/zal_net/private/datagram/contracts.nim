@@ -13,7 +13,7 @@ import zal_net/private/sys/threads
 ##   ciphers) for the listener's current settings; `freeAssoc` releases
 ##   what the codec kept in an association.
 ##
-## Codec state lives in `Listener.cst` and `Assoc.st`. Neither may point
+## Codec state lives in `DatagramListener.cst` and `Assoc.st`. Neither may point
 ## into data the provider frees on reload: associations outlive it.
 ## A destination is carried by a leg of some `LegKind`: direct, block, or
 ## framed. A framed leg is the association's own socket to a server, and
@@ -64,7 +64,7 @@ type
     pay*: ptr UncheckedArray[byte]
     payLen*: int
 
-  Listener* = object
+  DatagramListener* = object
     used: bool
     fd: cint
     id*: int                      ## listener id (the caller's)
@@ -139,8 +139,8 @@ type
     replyOverhead*: int
     emptyReplies*: bool
       ## A zero-length seal result sends an empty datagram instead of dropping it.
-    bindListener*: nil proc (e: ptr DatagramEngine; ib: ptr Listener): bool {.nimcall.}
-    unbindListener*: nil proc (ib: ptr Listener) {.nimcall.}
+    bindListener*: nil proc (e: ptr DatagramEngine; ib: ptr DatagramListener): bool {.nimcall.}
+    unbindListener*: nil proc (ib: ptr DatagramListener) {.nimcall.}
     freeAssoc*: nil proc (a: ptr Assoc) {.nimcall.}
 
   LegKind* = object
@@ -232,7 +232,7 @@ type
     readiness: nil Readiness
     retired: seq[Registration]
     inbox: ptr JobInbox
-    listeners: seq[Listener]
+    listeners: seq[DatagramListener]
     listenerLimit, assocLimit, pendingCap, controlLimit: int
     idx: AssocIndex
     assocs: seq[Assoc]
@@ -255,12 +255,12 @@ type
     stopped: int                 ## atomic: the thread has finished
 
 # State storage borrows are confined to callbacks inside serialized engine callbacks.
-proc listenerState*[T](l: ptr Listener): ptr T {.inline.} =
+proc listenerState*[T](l: ptr DatagramListener): ptr T {.inline.} =
   result = storageAs(l.cst, T)
 proc associationState*[T](a: ptr Assoc): ptr T {.inline.} =
   result = storageAs(a.st, T)
 proc providerContext*(e: ptr DatagramEngine): nil pointer {.inline.} = e.provider
-proc listenerAt*(e: ptr DatagramEngine; slot: int): nil ptr Listener =
+proc listenerAt*(e: ptr DatagramEngine; slot: int): nil ptr DatagramListener =
   ## Engine callback only; a listener slot supplied to a codec callback is valid.
   if slot < 0 or slot >= e.listeners.len or not e.listeners[slot].used: return nil
   result = addr e.listeners[slot]

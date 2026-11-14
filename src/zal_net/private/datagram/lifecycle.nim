@@ -62,7 +62,7 @@ template engineBody(e: ptr DatagramEngine) =
   let initial = min(InitialAssocs, e.assocLimit)
   initAssoc(e.idx, initial, e.assocLimit)
   e.assocs = newSeq[Assoc](initial)
-  e.listeners = newSeq[Listener](e.listenerLimit)
+  e.listeners = newSeq[DatagramListener](e.listenerLimit)
   var i = 0
   while i < e.listeners.len:
     e.listeners[i].fd = -1
