@@ -37,3 +37,6 @@
 - `runtimeWorkers` and the stats shards keep the pool size after the runtime has finished.
 - Use Nimony `abeb5082`.
 - Use Nimony `4ba90a78`.
+- `zal_net` exports the application tier: `Conn`, `Listener`, `serve`, `UdpSocket`, the runtime, tokens, events, deadlines, addresses, signals and the log. Protocol libraries import `zal_net/engine`, which no longer exports the old TCP owners or `net/udp`.
+- The datagram engine's `Listener` is `DatagramListener`.
+- Removed `net/unix`, `net/udp`, `net/server`, `net/scoped`, `raw/serve`, `foundation/udp`, `foundation/unix`, `foundation/unixlistener`, the `foundation` module, `BufReader` (`zal_net/reader`) and the unused admission gate. The stream concepts live in `net/stream`; the datagram engine's readiness in `private/datagram`.

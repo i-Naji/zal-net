@@ -1,8 +1,10 @@
 # zal-net
 
-Networking for Nimony: TCP, UDP, Unix sockets, cancellation and task scopes.
-Protocol libraries use the public streams and retained transport adapters.
-Raw IP, ICMP, TUN/TAP, batching and relay/datagram engines are explicit imports.
+Networking for Nimony: TCP, Unix-domain and UDP sockets, a server loop with
+one task per connection, cancellation tokens and the runtime they run on.
+Protocol libraries import `zal_net/engine` for descriptors, the relay and the
+datagram engine. Raw IP, ICMP, TUN/TAP and datagram batches are separate
+imports.
 
 ```nim
 import std/syncio
@@ -10,11 +12,9 @@ import zal_net
 
 proc main() {.passive.} =
   try:
-    let stream = connect("127.0.0.1", 7007, deadline=afterMs(2000))
-    defer: stream.close()
-    var bytes = [104'u8, 105]
-    stream.write(bytes)
-    discard stream.read(bytes)
+    var c = connect("127.0.0.1", 7007, afterMs(2000))
+    c.write "hi\n"
+    echo c.readLine(afterMs(2000))
   except ErrorCode as error:
     echo error
 

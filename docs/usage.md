@@ -16,25 +16,66 @@ compiler flags, `tname.os` names the systems it runs on. Each test has 180
 seconds per run. `tests/known` holds compiler repros; they report what the
 compiler does today and never fail the run.
 
-`TESTS="tests/relay tests/app/treadyio.nim"` picks categories or files,
+`TESTS="tests/relay tests/conn/techo.nim"` picks categories or files,
 `SUITE=stress` loops the shutdown and engine cases, `WORKERS="1 4"` runs every
 program at both worker counts. `build/test/tester --overwrite <tests>` records
 new goldens. Windows uses `scripts/test.ps1` with the same choices;
 `-Flags -d:nimIoringWsaPoll` selects its fallback.
 Tests and compiler caches stay in ignored `build/` directories.
 
-Handles retain one resource state. Aliases share ownership. One reader and one
-writer may coexist; a full write keeps admission across partial sends.
-Close rejects new work, cancels pending waits and drains borrowers before
-releasing the descriptor. A close deadline ends the wait, not cleanup.
-Destructors perform only quiescent, nonblocking cleanup.
-`renew` sets a standing deadline on a TCP or Unix stream; each read and write
-ends at the earlier of it and its own. `never` clears it.
+## Two imports
 
-Use retained transports for composition. Unsafe borrowed views cannot close or
-transfer owners. A rejected transfer preserves the source; admitted transfer
-invalidates its aliases and makes the destination responsible for cleanup.
-Low-level I/O reports bytes and failure separately. Do not replay partial writes.
+`import zal_net` is for programs: `Conn` and `Listener` for TCP and
+Unix-domain streams, `UdpSocket`, `serve`, the runtime, cancellation tokens,
+events and channels, deadlines, socket addresses, signals and the log.
+`import zal_net/engine` is for protocol libraries such as a proxy or an HTTP
+server: reads and writes on a descriptor in the caller's frame, readiness
+parks, listening and dialing by descriptor, endpoints, the relay and the
+datagram engine. The two import together without clashes. `zal_net/raw/*`
+holds the rest: raw TCP, Unix and UDP owners, datagram batches, IP, ICMP and
+TUN/TAP.
+
+## Ownership
+
+A `Conn` and a `UdpSocket` own their descriptor. They cannot be copied,
+moving one moves the descriptor, and each closes when it goes out of scope.
+`close` closes earlier and can be called twice. A `Listener` has no
+destructor: its owner calls `close`, which also removes a Unix socket's file.
+One task uses a value at a time, which is why no operation takes a lock.
+Another task reaches a connection through its token.
+
+Every failure raises an `ErrorCode`. `fill` and `read` answer the bytes that
+arrived, and 0 means the peer finished. `TimeoutError` means the deadline came
+first and `AbortedOperation` that a token was cancelled. A write sends all of
+its bytes or raises; it does not say how many went out before the raise.
+
+`peek` returns a view into the connection's buffer. Finish with it before the
+next `fill`, `read` or `consume`. `scratch` lends staging bytes for a frame
+that `flush` then writes in one call.
+
+## Deadlines and cancellation
+
+`renew` sets a standing deadline on a `Conn` or a `UdpSocket`. Each operation
+ends at the earlier of it and its own, so a call can tighten it and cannot
+widen it. `never` clears it. `connect` starts with none: its deadline bounds
+the setup only.
+
+Each `Conn` has its own token, a child of the `stop` token it was made with.
+Cancelling the connection's token shuts the socket down: its parked
+operations raise `AbortedOperation` and the peer reads the end. Cancelling the
+parent ends every child; cancelling a child leaves the parent and its
+siblings alone. A `Listener`'s `stop` token ends `accept` and leaves the
+accepted connections running. `endConnectionsWith` names a token that ends
+them. A `UdpSocket`'s token ends its waits for good; a parked wait notices
+within about 200 ms, and the descriptor stays open until `close`.
+
+`serve` runs one task per accepted connection. It closes each connection when
+its handler returns or raises, passes a raised error to `onError`, and keeps
+serving. It returns once the listener's token is cancelled and every handler
+has finished. The context is one `ref` shared by every handler, so guard what
+they change.
+
+## Runtime
 
 The process runner drains tasks and joins blocking/logging/signal services
 before shutting down the standard pool.
@@ -51,33 +92,51 @@ The default comes from its CPU count/affinity; `runtimeWorkers()` reports it.
 A single worker delays datagram-engine readiness under heavy association churn; use two or more.
 I/O uses nonblocking native calls and public standard readiness/timer operations.
 Cancellation returns after the pending standard operation releases its storage.
-A token, or closing a UDP socket, cancels an idle parked wait within about 200 ms;
-closing a stream is immediate.
 
 Linux offloads and raw-network/TUN tests need native capabilities and permissions.
 Platform errors and unavailable checks are kept explicit.
-
-`peek(reader)` returns a checked borrowed slice. End its scope before calling
-`fill(reader)` or `consume(reader, count)`. Pointer overloads are for low-level
-callers that manage this lifetime themselves. `readExactly(reader, buffer)`
-returns `IoResult`, including bytes received before EOF or failure.
 `tests/contracts` checks that the compiler rejects invalid borrows and managed
 channel payloads.
 
-`retainTransport(owner)` builds a transport from the owner's `recvInto`,
-`sendFrom`, `halfClose`, `interrupt`, `retire`, `dispose` and `canTransfer`
-procedures. Read and write accept a pointer, count, deadline and cancellation
-token. Close, dispose and transfer checks return an integer error code.
-The adapter and its retained owner slot share one allocation.
+`zal_net/raw/udp`'s `sendBatch` returns `BatchResult(sent, error)`: a failure
+can follow a sent prefix. To retry the remainder, advance `first` by `sent` and
+reduce the requested packet count by the same amount. The caller keeps the
+`MmsgBatch` alive and unchanged until the operation completes. An empty packet
+still sends a datagram; a zero-entry batch performs no I/O.
 
-`ownTransport(owner, operations, control)` takes a `sink owned` reference
-when a constructor wants to hand off its concrete owner. Build this in an
-ordinary procedure, then pass the returned shared transport to passive code.
-The current compiler cannot lower an owned reference local in a passive frame.
-Transfer still checks for pending I/O and invalidates existing adapter aliases.
+## Moving from the old API
 
-UDP `sendBatch` returns `BatchResult(sent, error)`: a failure can follow a sent
-prefix. To retry the remainder, advance `first` by `sent` and reduce the requested
-packet count by the same amount. The caller keeps the `MmsgBatch` alive and
-unchanged until the operation completes. An empty packet still sends a datagram;
-a zero-entry batch performs no I/O.
+`zal_net` used to export reference-counted owners with shared admission
+(`OwnerLife`), retained transports and borrow admission. Those are gone from
+`zal_net`, from `zal_net/engine` and from these docs. Code written against
+them changes as follows.
+
+| Old | New |
+| --- | --- |
+| `TcpStream` (`net/tcp`), `TcpConnRef` (`foundation/tcp`) | `Conn` |
+| `TcpListener` (`net/tcp`), `TcpListenerRef` (`foundation/tcplistener`) | `Listener` |
+| `connect(host, port, deadline = d)` | `connect(host, port, d)` |
+| `stream.read(buf, deadline = d)`, `stream.write(buf, deadline = d)` | `c.read(buf, d)`, `c.write(buf, d)` on a `var Conn` |
+| `stream.close()`, `retire(owner)`, `closeNow(owner)` | `close c`, or the end of the scope |
+| `halfClose(owner)` | `shutdownWrite(c)` |
+| `deadline(stream)`, `renew(stream, d)` | `renew(c, d)` |
+| `lastReadFailure`, `lastWriteFailure`, `IoResult` | the raised `ErrorCode` |
+| a `cancel` token per call | the connection's token, `cancelToken(c)` |
+| `serve(listener, handler, ctx, onError)` with `handler(stream: TcpStream; ctx)` | `serve(listener, handler, ctx, onError)` with `handler(c: var Conn; ctx)`; cancel the listener's `stop` token to end it |
+| `zal_net/raw/serve` and `ContextHandler` | `serve` |
+| `net/unix`: `listen(path)`, `connect(path)`, `UnixStream`, `UnixConnRef` | `listenUnix(path)`, `connectUnix(path)`, `Conn` |
+| `net/udp`: `bindUdp`, `openUdp`, `connectUdp`, `UdpSocket`; `UdpSocketRef` (`foundation/udp`) | `openUdp(port, host)` and `connect` for a default peer; `UdpSocket` |
+| `recvDatagram`, `sendDatagram`, UDP `read` and `write` | `recvFrom`, `sendTo`, `recv`, `send` |
+| `DatagramInfo`, multicast, broadcast and batches on the UDP owner | `zal_net/raw/udp` on `nativeHandle(u)` |
+| `BufReader` (`zal_net/reader`): `readLine`, `readUntil`, `readExactly` | `Conn`: `readLine`, `fill`, `peek`, `consume` |
+| `withTcp`, `withUnix`, `withUdp`, `withListener` (`net/scoped`) | the end of the value's scope |
+| `OwnerLife`, `beginBorrow`, `drainClose` (`ownership`) | none: one task uses a `Conn` at a time |
+| `Transport`, `retainTransport`, `ownTransport`, `tcpTransport`, `unsafeBorrowStream` over an owner | a `Layer` installed on a `Conn` with `install`, as zal-tls's `secure` does |
+| `ByteStream`, `DuplexStream` (`zal_net/streamconcepts`) | the same concepts in `zal_net/net/stream` |
+| the datagram engine's `Listener` | `DatagramListener` |
+| `zal_net/foundation/readiness` | the datagram engine's own, in `private/datagram` |
+| `TcpConnRef` and the old UDP sockets from `zal_net/engine` | a descriptor, or `initConn(fd, deadline)` to hand it to a program |
+
+zal-tls still imports `net/tcp`, `net/tcpview`, `net/transport`,
+`foundation/tcp`, `foundation/tcplistener`, `ownership` and `io`. They stay
+until zal-tls moves to `Conn`; new code does not use them.
