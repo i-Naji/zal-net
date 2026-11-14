@@ -60,7 +60,7 @@ proc tcpPair(outer, inner: var cint) {.passive.} =
   inner = takeNativeHandle(addr sv)
   closeNow(l)
 
-proc runRelay(c: Conn) {.passive.} =
+proc runRelay(c: Relay) {.passive.} =
   startPumps(c)
 
 proc main() {.passive.} =
@@ -71,7 +71,7 @@ proc main() {.passive.} =
   var r2: cint = -1
   tcpPair(o1, r1)
   tcpPair(o2, r2)
-  let c = newConn(5000)
+  let c = newRelay(5000)
   if c == nil: quit "trelaysplice: no connection block"
   c.fd = r1
   c.up = r2

@@ -16,7 +16,7 @@ proc readRoom(d: DirectionPtr): int =
     d.fill = HeadRoom + n
   result = BufCap - d.fill
 
-proc ingestFramed(c: Conn; d: DirectionPtr; f: Framer; short: var bool): int {.noinline.} =
+proc ingestFramed(c: Relay; d: DirectionPtr; f: Framer; short: var bool): int {.noinline.} =
   ## Decode what is buffered (`f` is d.srcFramer); read more until a batch
   ## is ready. `short` says whether the last read left room.
   let ended = f.sourceEnded
@@ -89,7 +89,7 @@ proc plainSpans(d: DirectionPtr; total: int) =
   d.nspans = i
   d.bytes = total
 
-proc ingestPlain(c: Conn; d: DirectionPtr): int {.noinline.} =
+proc ingestPlain(c: Relay; d: DirectionPtr): int {.noinline.} =
   ## readv scatters plaintext into record slots, leaving the sink's head
   ## and tail gaps, so a full batch is framed in place and written at once.
   if not hasPayload(d):
@@ -119,7 +119,7 @@ proc ingestPlain(c: Conn; d: DirectionPtr): int {.noinline.} =
 
 # ------------------------------------------------------------------- sink
 
-proc prepareEmit(c: Conn; d: DirectionPtr): bool {.noinline.} =
+proc prepareEmit(c: Relay; d: DirectionPtr): bool {.noinline.} =
   let f = d.dstFramer
   if f != nil: return f.seal(c, d)
   var i = 0
@@ -146,7 +146,7 @@ proc advanceWritten(d: DirectionPtr; written: int) =
       d.iov[d.iovAt].iov_len = csize_t(l - left)
       left = 0
 
-proc emitSome(c: Conn; d: DirectionPtr): int {.noinline.} =
+proc emitSome(c: Relay; d: DirectionPtr): int {.noinline.} =
   ## 1: batch written; InAgain: park until writable; InFail: error.
   let sf = d.dstFramer
   if sf != nil:
@@ -219,7 +219,7 @@ when defined(linux):
     SpliceMissing = 38                   # ENOSYS
     SplicePipe = 1 shl 20                # pipe size asked for, and bytes per splice
 
-  proc spliceable(c: Conn; d: DirectionPtr): bool {.inline.} =
+  proc spliceable(c: Relay; d: DirectionPtr): bool {.inline.} =
     ## Plain to plain, and no hook that looks at the batches.
     if d.srcFramer != nil or d.dstFramer != nil: return false
     let h = c.hooks
@@ -245,7 +245,7 @@ when defined(linux):
     pr = -1
     pw = -1
 
-  template spliceDirection(c: Conn; d: DirectionPtr; pr, pw: cint; moved: ptr int64;
+  template spliceDirection(c: Relay; d: DirectionPtr; pr, pw: cint; moved: ptr int64;
                            held, sent, res: var int; graceful: var bool; why: var PumpFailure;
                            code: var int; done: var bool) =
     ## Socket to socket through the pipe until the source ends or something
@@ -316,7 +316,7 @@ when defined(linux):
 
 # ------------------------------------------------------------------- pump
 
-proc pump*(c: Conn; d: DirectionPtr) {.passive.} =
+proc pump*(c: Relay; d: DirectionPtr) {.passive.} =
   ## One direction, start to finish, in a single passive frame. A batch
   ## already in d.spans (initial payload from a handshake) goes out first.
   var res = 0
@@ -475,16 +475,16 @@ proc pump*(c: Conn; d: DirectionPtr) {.passive.} =
   when defined(linux): closePipe(pr, pw)
   finishDir(c, d, graceful, why, code)
 
-template startPumps*(c: Conn) =
+template startPumps*(c: Relay) =
   ## Lay out both directions, then run direction b as a new task on this
   ## loop while direction a continues in the caller's frame chain. A
   ## framer pair that cannot work together fails the connection.
   if not layout(addr c.a) or not layout(addr c.b):
-    failConn(c, "framer geometry")
+    failRelay(c, "framer geometry")
   else:
     c.refs = 2
     if trySpawnTask(pump(c, addr c.b)):
       pump(c, addr c.a)
     else:
       c.refs = 0
-      failConn(c, "runtime shutdown")
+      failRelay(c, "runtime shutdown")

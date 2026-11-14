@@ -21,7 +21,7 @@ const Key = 0x5A'u8
 
 # ------------------------------------------------------------ toy framers
 
-proc toyOpen(c: Conn; d: DirectionPtr): int =
+proc toyOpen(c: Relay; d: DirectionPtr): int =
   let f = d.srcFramer
   if f == nil: return InFail
   let g = f.geometry
@@ -55,7 +55,7 @@ proc toyOpen(c: Conn; d: DirectionPtr): int =
 
 proc toyBoundary(d: DirectionPtr): bool = true
 
-proc toySeal(c: Conn; d: DirectionPtr): bool =
+proc toySeal(c: Relay; d: DirectionPtr): bool =
   let f = d.dstFramer
   if f == nil: return false
   let g = f.geometry
@@ -93,14 +93,14 @@ proc putEmpty(d: DirectionPtr) =
   d.preLen = 8
   d.preAt = 0
 
-proc markSeal(c: Conn; d: DirectionPtr): bool =
+proc markSeal(c: Relay; d: DirectionPtr): bool =
   ## toySeal, and an empty record before the first batch (the prefix).
   result = toySeal(c, d)
   if result and sinkState[array[StateWords, uint64]](d)[][0] == 0:
     sinkState[array[StateWords, uint64]](d)[][0] = 1
     putEmpty(d)
 
-proc markFinish(c: Conn; d: DirectionPtr): bool =
+proc markFinish(c: Relay; d: DirectionPtr): bool =
   ## An empty record at the clean end of stream, before the half-close.
   putEmpty(d)
   result = true
@@ -113,7 +113,7 @@ var gHugeTail = toyFramer(4, 300_000, 4096, 0)      # no record fits a direction
 var gPrefixCalls: int            # writePrefix calls (the hook is re-entered)
 var gReadFailed: int              # readFailed calls
 
-proc slowPrefix(c: Conn; d: DirectionPtr): int =
+proc slowPrefix(c: Relay; d: DirectionPtr): int =
   ## The sink writes its own prefix, three bytes a call: InAgain until done.
   gPrefixCalls = gPrefixCalls + 1
   let n = min(3, d.preLen - d.preAt)
@@ -122,7 +122,7 @@ proc slowPrefix(c: Conn; d: DirectionPtr): int =
   elif k != IoAgain: return InFail
   result = if d.preAt < d.preLen: InAgain else: 1
 
-proc endOnReset(c: Conn; d: DirectionPtr; err: int): int =
+proc endOnReset(c: Relay; d: DirectionPtr; err: int): int =
   ## A failed read after whole records is a clean end here.
   gReadFailed = gReadFailed + 1
   if err == 0: return InFail                     # the read's error is passed along
@@ -160,17 +160,17 @@ var gEnds: int                  # atomic: onEnd calls
 var gEndReason: int             # the last onEnd's reason (ord)
 var gEndUp, gEndDown: int64     # the connection's counters at onEnd
 
-proc hookBatch(c: Conn; d: DirectionPtr; bytes: int) =
+proc hookBatch(c: Relay; d: DirectionPtr; bytes: int) =
   if d == addr c.a: discard atomicFetchAdd(gBatchUp, bytes, moRelaxed)
   else: discard atomicFetchAdd(gBatchDown, bytes, moRelaxed)
 
-proc hookEnd(c: Conn) =
+proc hookEnd(c: Relay) =
   gEndReason = ord(c.endReason)
   gEndUp = c.upBytes
   gEndDown = c.downBytes
   discard atomicFetchAdd(gEnds, 1, moAcquireRelease)
 
-var gHooks = ConnHooks(onBatch: hookBatch, onEnd: hookEnd)
+var gHooks = RelayHooks(onBatch: hookBatch, onEnd: hookEnd)
 
 proc resetHooks() =
   atomicStore(gBatchUp, 0, moRelaxed)
@@ -307,15 +307,15 @@ proc readFramed(fd: cint; total, seed, head, tail, maxRecord: int; label: string
   if got == total and fill == 0: pass()
   else: fail(label & ": got " & $got & " of " & $total & ", " & $fill & " left over")
 
-proc runRelay(c: Conn) {.passive.} =
+proc runRelay(c: Relay) {.passive.} =
   startPumps(c)
 
 proc makeConn(timeoutMs: int; aSrc, aDst, bSrc, bDst: nil Framer;
-              outer, outerUp: var cint): Conn =
+              outer, outerUp: var cint): Relay =
   ## outer <-> [fd | relay | up] <-> outerUp; direction a runs fd -> up.
   let (o1, r1) = openPair()
   let (r2, o2) = openPair()
-  let c = newConn(timeoutMs)
+  let c = newRelay(timeoutMs)
   if c == nil: quit "trelay: no connection block"
   result = c
   result.fd = r1

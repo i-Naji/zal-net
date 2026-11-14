@@ -3,14 +3,14 @@
 ## Included by relay/conn; block ownership, pools and connection closure.
 # ------------------------------------------------------------------- pool
 
-proc mapBlock(): nil Conn =
-  result = cast[nil Conn](mapAnon(sizeof(ConnObj)))
+proc mapBlock(): nil Relay =
+  result = cast[nil Relay](mapAnon(sizeof(RelayObj)))
 
-proc unmapBlock(c: Conn) =
-  unmapAnon(c, sizeof(ConnObj))
+proc unmapBlock(c: Relay) =
+  unmapAnon(c, sizeof(RelayObj))
 
 var poolLock: Lock
-var poolHead: nil Conn
+var poolHead: nil Relay
 var poolLen: int
 var poolClosing: bool
 var liveConns: int      # connection blocks in use (atomic)
@@ -35,7 +35,7 @@ proc retainedPayloadBuffers*(): int =
   result = payloadPoolLen
   release(poolLock)
 
-proc relayMetadataBytes*(): int = sizeof(ConnObj)
+proc relayMetadataBytes*(): int = sizeof(RelayObj)
 
 when defined(nnRelayFaultTest):
   var rejectPayload: bool
@@ -133,7 +133,7 @@ proc initDir(d: DirectionPtr) =
   d.slotCount = 0
   d.inStride = 0
 
-proc takeBlock(maxConns: int): nil Conn =
+proc takeBlock(maxConns: int): nil Relay =
   ## A pooled block, else a fresh mapping; nil when mapping fails.
   acquire(poolLock)
   if poolClosing or (maxConns > 0 and atomicLoad(liveConns, moRelaxed) >= maxConns):
@@ -186,7 +186,7 @@ proc giveAlt(a: DirectionPtr) =
   if not keep: unmapAnon(a, sizeof(Dir))
   discard atomicFetchSub(liveAlts, 1, moRelease)
 
-proc newConn*(timeoutMs: int; maxConns = 0; payloadIdleMs = 30_000): nil Conn =
+proc newRelay*(timeoutMs: int; maxConns = 0; payloadIdleMs = 30_000): nil Relay =
   ## A metadata block, or nil. Payloads are absent until first use.
   ## Reclaimed payloads remain in a separate bounded pool. Every byte is
   ## written before it is read. `proto`, `ext` and the framer states are
@@ -231,7 +231,7 @@ proc closeFramers(d: DirectionPtr) =
   d.relayout = false
   d.sinkInAlt = false
 
-proc freeConn*(c: Conn) =
+proc freeRelay*(c: Relay) =
   ## Framer close hooks, then back to the pool. Descriptors are the caller's.
   closeFramers(addr c.a)
   closeFramers(addr c.b)
@@ -276,13 +276,13 @@ proc stopRelayPool*(): bool =
   result = atomicLoad(liveConns, moAcquire) == 0 and atomicLoad(liveAlts, moAcquire) == 0 and atomicLoad(livePayloads, moAcquire) == 0
   release(poolLock)
 
-proc runEnd(c: Conn) {.inline.} =
+proc runEnd(c: Relay) {.inline.} =
   let h = c.hooks
   if h != nil:
     let e = h.onEnd
     if e != nil: e(c)
 
-proc failConn*(c: Conn; why: string) =
+proc failRelay*(c: Relay; why: string) =
   ## A handshake failure, before any pump runs: reset rather than FIN.
   when defined(nnTraceRelay): stderr.writeLine("fail " & $c.fd & " " & why)
   else: discard why
@@ -290,15 +290,15 @@ proc failConn*(c: Conn; why: string) =
   runEnd(c)
   if c.fd >= 0: lingerRst(c.fd)
   if c.up >= 0: closeFd(c.up)
-  freeConn(c)
+  freeRelay(c)
 
-proc closeConn*(c: Conn) =
+proc closeRelay*(c: Relay) =
   ## Before any pump runs, after a protocol reply: FIN, so the peer reads
   ## the reply.
   runEnd(c)
   if c.fd >= 0: closeFd(c.fd)
   if c.up >= 0: closeFd(c.up)
-  freeConn(c)
+  freeRelay(c)
 
 const FailPollMs = 200   ## Windows, std backend: how often a parked pump looks for a failure
 const ErrorProbeMs = 10  ## Linux epoll: first look for a socket error, doubling to a second
@@ -313,7 +313,7 @@ proc peekInput(fd: cint): int =
     if err == EIntr: continue
     return (if err == EAgain: IoAgain else: -err)
 
-template relayPark(c: Conn; fd: cint; events: IoEvents; res: var int) =
+template relayPark(c: Relay; fd: cint; events: IoEvents; res: var int) =
   ## A pump's park (`parkReady` on the connection's idle stamp). On Windows
   ## with the std backend nothing wakes a parked task when the other
   ## direction fails (no shutdown hook there, no abort, and a FIN is not
@@ -332,7 +332,7 @@ template relayPark(c: Conn; fd: cint; events: IoEvents; res: var int) =
   else:
     parkReady(fd, events, addr c.lastIo, c.timeoutMs, res)
 
-template relayReadPark(c: Conn; d: DirectionPtr; res: var int) =
+template relayReadPark(c: Relay; d: DirectionPtr; res: var int) =
   ## Idle payload reclamation has its own deadline. It neither consumes input
   ## nor ends the connection. Descriptor readiness holds no buffer address.
   block:
@@ -372,7 +372,7 @@ template relayReadPark(c: Conn; d: DirectionPtr; res: var int) =
         if monoNow() >= ioDeadline(addr c.lastIo, c.timeoutMs): break
       elif not transientIo(res): break
 
-proc failStreams(c: Conn; d: DirectionPtr; reason: EndReason) =
+proc failStreams(c: Relay; d: DirectionPtr; reason: EndReason) =
   ## A direction failed: the connection fails, once. Neither peer may read
   ## a clean end of a stream cut short, the other direction's included
   ## (it stops here too): both sockets reset, and nothing else goes out (no
@@ -389,7 +389,7 @@ proc failStreams(c: Conn; d: DirectionPtr; reason: EndReason) =
   for fd in [d.src, d.dst]:
     if not abortSocket(fd): shutdownRead(fd)
 
-proc finishDir(c: Conn; d: DirectionPtr; graceful: bool; why = pfNone; code = 0) =
+proc finishDir(c: Relay; d: DirectionPtr; graceful: bool; why = pfNone; code = 0) =
   ## Clean EOF propagates as a half-close (not after a failure). A failure
   ## fails the connection (`failStreams`); descriptors stay open until the
   ## other pump has finished. `why`/`code` say what ended a failed direction.
@@ -405,5 +405,5 @@ proc finishDir(c: Conn; d: DirectionPtr; graceful: bool; why = pfNone; code = 0)
     runEnd(c)
     closeFd(c.fd)
     closeFd(c.up)
-    freeConn(c)
+    freeRelay(c)
 

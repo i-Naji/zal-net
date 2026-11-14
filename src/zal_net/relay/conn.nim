@@ -1,4 +1,4 @@
-## The relay: a connection as one pooled, raw block (`ConnObj`: plain data,
+## The relay: a connection as one pooled, raw block (`RelayObj`: plain data,
 ## no managed fields) holding both directions. Each direction is driven by
 ## ONE flat passive proc, `pump`. All parsing, sealing and opening happens in
 ## regular procs, and the pump suspends only through the inline readiness
@@ -11,7 +11,7 @@
 ## each record's payload on the wire, the largest payload (`maxRecord`),
 ## and the room it needs before the first record (`headRoom`). It keeps its
 ## per-direction state (cipher context, parse state) in the Dir's
-## `srcSt`/`dstSt` words, and per-connection data (keys) in `ConnObj.proto`.
+## `srcSt`/`dstSt` words, and per-connection data (keys) in `RelayObj.proto`.
 ##
 ## Buffer layout: a plain source's bytes are scattered by readv into record
 ## slots laid out for the sink framer's geometry (`layout`, cached in the
@@ -30,7 +30,7 @@
 ## splice(2) through a pipe once a read fills a slot; a refused splice goes
 ## back to the buffer, pipe contents first.
 ##
-## Frameworks: `hooks` (`ConnHooks`) is called after every batch and once
+## Frameworks: `hooks` (`RelayHooks`) is called after every batch and once
 ## as the connection ends; `ext` holds the framework's per-connection data
 ## (a session), zeroed for each connection.
 ##

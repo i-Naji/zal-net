@@ -4,7 +4,7 @@ import zal_net/rt
 import zal_net/raw/io
 import zal_net/relay/conn
 
-template fillTo*(c: Conn; d: DirectionPtr; want: int; deadline: Deadline; res: var int; ok: var bool) =
+template fillTo*(c: Relay; d: DirectionPtr; want: int; deadline: Deadline; res: var int; ok: var bool) =
   ## Buffer at least `want` bytes after d.off. Extra bytes stay buffered.
   ## Progress does not extend `deadline`. The arguments are evaluated once
   ## (a template would otherwise re-evaluate `want` on every pass).
@@ -26,7 +26,7 @@ template fillTo*(c: Conn; d: DirectionPtr; want: int; deadline: Deadline; res: v
       ok = false
       break
 
-template sendAll*(c: Conn; fd: cint; p0: pointer; n0: int; res: var int; ok: var bool) =
+template sendAll*(c: Relay; fd: cint; p0: pointer; n0: int; res: var int; ok: var bool) =
   block:
     let saBase = cast[int](p0)
     let saLen = n0

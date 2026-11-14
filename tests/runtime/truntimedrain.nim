@@ -57,7 +57,7 @@ proc main() {.passive.} =
   release(rejected)
   let stoppedRelay = streams.relay(addr relayClient, addr relayServer)
   assert stoppedRelay.aToB.error == ECancelled
-  let c = newConn(1000)
+  let c = newRelay(1000)
   assert c != nil
   startPumps(c) # the second pump is rejected; no leaked connection reference
   assert liveConnections() == 0

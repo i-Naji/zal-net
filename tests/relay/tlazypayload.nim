@@ -5,14 +5,14 @@ import zal_net/raw/socket
 import zal_net/relay
 
 var endings: int
-proc ended(c: Conn) =
+proc ended(c: Relay) =
   assert c.endReason == erEof or (defined(nnRelayFaultTest) and c.endReason == erError)
   discard atomicFetchAdd(endings, 1, moRelease)
-let hooks = ConnHooks(onEnd: ended)
+let hooks = RelayHooks(onEnd: ended)
 
-proc run(c: Conn) {.passive.} = startPumps(c)
-proc made(left, right: cint; framed: nil Framer = nil): Conn =
-  let candidate = newConn(2000, payloadIdleMs=20)
+proc run(c: Relay) {.passive.} = startPumps(c)
+proc made(left, right: cint; framed: nil Framer = nil): Relay =
+  let candidate = newRelay(2000, payloadIdleMs=20)
   assert candidate != nil
   if candidate == nil: quit "connection admission failed"
   result = candidate
@@ -31,7 +31,7 @@ proc emptyBuffers() {.passive.} =
     assert monoNow() < deadline, "idle payload did not reclaim"
     parkUntil(afterMs(1))
 
-proc frameOpen(c: Conn; d: DirectionPtr): int =
+proc frameOpen(c: Relay; d: DirectionPtr): int =
   if d.fill - d.off < 2: return 0
   let size = int(d.buf[d.off])
   if d.fill - d.off < size + 1: return 0
@@ -41,7 +41,7 @@ proc frameOpen(c: Conn; d: DirectionPtr): int =
   d.off = d.off + size + 1
   result = 1
 proc boundary(d: DirectionPtr): bool = d.off == d.fill
-proc seal(c: Conn; d: DirectionPtr): bool = false
+proc seal(c: Relay; d: DirectionPtr): bool = false
 proc noClose(d: DirectionPtr) = discard
 let fixtureFramer = FramerObj(geometry: Geometry(head: 1, maxRecord: 64),
   open: frameOpen, atBoundary: boundary, seal: seal, closeSource: noClose, closeSink: noClose)
@@ -71,7 +71,7 @@ proc producer(fd: cint) {.passive.} =
   atomicStore(producerDone, 1, moRelease)
 
 proc main() {.passive.} =
-  let fresh = newConn(0)
+  let fresh = newRelay(0)
   assert fresh != nil
   if fresh != nil:
     assert not hasPayload(addr fresh.a) and not hasPayload(addr fresh.b)
@@ -80,7 +80,7 @@ proc main() {.passive.} =
       failNextPayloadAllocation()
       assert not ensurePayload(addr fresh.a) and not hasPayload(addr fresh.a)
       assert livePayloadBuffers() == 0
-    freeConn(fresh)
+    freeRelay(fresh)
   let (client, ingress) = openPair()
   let (egress, sink) = openPair()
   let c = made(ingress, egress)
