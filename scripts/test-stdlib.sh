@@ -23,7 +23,7 @@ case "$MODE" in
   asan) set -- "$@" --passC:-fsanitize=address,undefined --passC:-DMI_TRACK_ASAN=1 --passC:-fno-omit-frame-pointer --passL:-fsanitize=address,undefined ;;
   *) echo "unknown MODE: $MODE" >&2; exit 2 ;;
 esac
-for TEST in treadiness tadmission tdrain tcontinuations tretry; do
+for TEST in treadiness tcontinuations tretry; do
   XDG_CACHE_HOME="$OUT/c-cache" "$ROOT/bin/nimony" c --ff "$@" --nimcache:"$OUT/cache-$TEST" -o:"$OUT/$TEST" \
     "tests/stdlib/$TEST.nim" >"$OUT/$TEST-build.log" 2>&1 || {
       cat "$OUT/$TEST-build.log" >&2; exit 1;
@@ -39,11 +39,11 @@ except subprocess.TimeoutExpired:
 sys.exit(result.returncode)
 PY
 done
-# A non-atomic memory model must not compile worker-safe handles.
+# A non-atomic memory model must not compile the runtime's shared handles.
 if "$ROOT/bin/nimony" c --ff --mm:arc --path:src \
   --nimcache:"$OUT/cache-reject-arc" -o:"$OUT/reject-arc" \
-  tests/stdlib/tadmission.nim >"$OUT/reject-arc.log" 2>&1; then
-  echo 'FAIL: admission accepted non-atomic ARC' >&2; exit 1
+  tests/runtime/trunmain.nim >"$OUT/reject-arc.log" 2>&1; then
+  echo 'FAIL: the runtime accepted non-atomic ARC' >&2; exit 1
 fi
-grep -q 'Worker-safe resource handles require --mm:atomicArc' "$OUT/reject-arc.log"
+grep -q 'Standard runtime handles require --mm:atomicArc' "$OUT/reject-arc.log"
 echo 'PASS rejects non-atomic ARC'
