@@ -100,6 +100,46 @@ template udpRecvFrom*(fd: cint; timeoutMs: int; p: pointer; n: int; src: nil ptr
     release(operationTokens)
     outcome
 
+template udpSendInline*(fd: cint; timeoutMs: int; p: pointer; n: int;
+                        deadline: Deadline; tokens: IoCancellation): int =
+  ## `udpSend` in the caller's passive frame, for a connected socket. A
+  ## connected socket needs send(2): BSD refuses sendto(2) with an address.
+  block:
+    let descriptor = fd
+    let idleLimit = timeoutMs
+    let buffer = p
+    let count = n
+    let operationDeadline = deadline
+    let operationTokens = tokens
+    retain(operationTokens)
+    var outcome = InvalidInput
+    if count >= 0:
+      let d = limit(idleLimit, operationDeadline)
+      var ready = 0
+      ioCheckpoint(min(count, 65536))
+      while true:
+        if cancelled(operationTokens):
+          outcome = ECancelled
+          break
+        if expired(d):
+          outcome = IoTimedOut
+          break
+        let k = sockSend(descriptor, buffer, csize_t(count), 0)
+        if k >= 0:
+          outcome = k
+          break
+        let err = int(osLastError())
+        if err == EIntr: continue
+        if err != EAgain:
+          outcome = -err
+          break
+        parkCancellable(descriptor, {evWrite}, d, operationTokens, ready)
+        if ready <= 0:
+          outcome = if ready < 0: ready else: ResourceClosed
+          break
+    release(operationTokens)
+    outcome
+
 proc udpSend*(fd: cint; timeoutMs: int; p: pointer; n: int; deadline = never;
            tokens: IoCancellation): int {.passive.} =
   if n < 0: return InvalidInput
