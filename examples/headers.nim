@@ -1,70 +1,55 @@
-## A bounded HTTP-style header reader, reusable over TCP or TLS.
-## Build normally for TCP; add -d:withTls and --path:../nimony-tls/src for TLS.
-## This example only reads a header block; it is not an HTTP implementation.
+## A bounded HTTP-style header reader over a `Conn`, plain or with TLS.
+## Build with --path:src for TCP; add -d:withTls, --path:../zal-tls/src and
+## the AWS-LC flags for TLS. It reads one header block and stops there.
 import std/[cmdline, syncio]
-import zal_net/rt
-import zal_net/net/[transport, tcpview]
-import zal_net/foundation/tcp
-import zal_net/io
+import zal_net
 when defined(withTls):
-  import nimony_tls as tls
-  import nimony_tls/net/tlsview
+  import zal_tls as tls
+  import zal_tls/secure
 
 const MaxHead = 8192
 
-type Head* = object
-  bytes*: array[MaxHead, byte]
-  length*: int
-  error*: int
+proc headLength(bytes: openArray[byte]): int =
+  ## The head's length with its blank line, or -1 while the blank line has
+  ## not arrived.
+  result = -1
+  for i in 3 ..< bytes.len:
+    if bytes[i-3] == 13 and bytes[i-2] == 10 and bytes[i-1] == 13 and bytes[i] == 10:
+      return i + 1
 
-proc readHead*(transport: Transport; deadline: Deadline): Head {.passive.} =
-  result = default(Head)
-  while result.length < MaxHead:
-    # A byte at a time makes the example's boundary explicit: never consume
-    # bytes from the body. Production parsers can use zal_net/reader.
-    var one = [0'u8]
-    let count = recvInto(transport, one, deadline)
-    if count <= 0:
-      result.error = if count < 0: count else: StreamEof
-      return
-    result.bytes[result.length] = one[0]
-    inc result.length
-    let at = result.length
-    if at >= 4 and result.bytes[at-4] == 13 and result.bytes[at-3] == 10 and
-        result.bytes[at-2] == 13 and result.bytes[at-1] == 10:
-      return
-  result.error = TooLong
+proc takeHead(c: var Conn): string =
+  ## The head if it is buffered whole, consumed; "" otherwise. Body bytes stay
+  ## in the buffer for whoever reads next.
+  result = ""
+  let size = headLength(c.peek)
+  if size > 0:
+    for i in 0 ..< size: result.add char(c.peek[i])
+    c.consume size
 
-proc exchange(transport: Transport): Head {.passive.} =
-  # Fixed input avoids interpolating an untrusted hostname into a request.
-  let request = [71'u8,69,84,32,47,32,72,84,84,80,47,49,46,48,13,10,13,10]
-  let sent = writeAll(transport, request, afterMs(5000))
-  if sent.error != 0:
-    result = default(Head)
-    result.error = sent.error
-  else:
-    result = readHead(transport, afterMs(5000))
+proc readHead*(c: var Conn; deadline: Deadline): string {.passive, raises.} =
+  ## The header block, blank line included. Raises `ContentTooLong` past
+  ## `MaxHead` bytes and `EndOfStreamError` when the peer ends first.
+  result = takeHead(c)
+  while result.len == 0:
+    if c.buffered >= MaxHead: raise ContentTooLong
+    if c.fill(deadline) == 0: raise EndOfStreamError
+    result = takeHead(c)
 
 when isMainModule:
-  proc main() {.passive.} =
-    let host = paramStr(1)
-    when defined(withTls):
-      try:
+  proc main(host: string) {.passive.} =
+    try:
+      when defined(withTls):
         let config = tls.newClientConfig(tls.systemTrust())
-        let connection = tls.connect(config, host, 443, deadline=afterMs(5000))
-        defer: connection.close()
-        let stream = tlsTransport(connection)
-        let head = exchange(stream)
-        echo "header bytes=", head.length, " error=", head.error
-      except ErrorCode as error:
-        echo error
-    else:
-      let connected = connectTcpConn(host, 80, deadline=afterMs(5000))
-      let connection = connected.value
-      if connection != nil:
-        let stream = tcpTransport(connection)
-        defer: discard close(stream)
-        let head = exchange(stream)
-        echo "header bytes=", head.length, " error=", head.error
+        var c = connect(host, 443, afterMs(5000))
+        c.secure(config, host, afterMs(5000))
+      else:
+        var c = connect(host, 80, afterMs(5000))
+      c.renew afterMs(5000)
+      # A fixed request: the host name never reaches the bytes on the wire.
+      c.write "GET / HTTP/1.0\r\n\r\n"
+      let head = readHead(c, afterMs(5000))
+      echo "header bytes=", head.len
+    except ErrorCode as error:
+      echo error
   if paramCount() != 1: quit "usage: headers hostname"
-  discard runMain(main())
+  discard runMain(main(paramStr(1)))

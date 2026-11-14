@@ -11,6 +11,5 @@ app/tapplicationudp
 owners/tudpdeadline
 app/tapplicationserve
 values/treaderresults
-owners/ttransport
 owners/ttransportcancel
 runtime/tservicedrain
