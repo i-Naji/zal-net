@@ -1,31 +1,27 @@
 ## nimony c --path:src examples/application_echo.nim
+## An echo server on port 7007, one task per connection.
 import std/syncio
 import zal_net
-import zal_net/log
 
-type Context = ref object
-  connections: int
+type App = ref object
 
-proc report(ctx: Context; error: ErrorCode) = logWarn("connection: " & $error)
-
-proc echoClient(stream: TcpStream; ctx: Context) {.passive, raises.} =
-  inc ctx.connections
-  var bytes = default(array[16_384, byte])
+proc echoConn(c: var Conn; app: App) {.passive, raises.} =
+  var buffer = default(array[16_384, byte])
   while true:
-    let count = stream.read(bytes)
-    if count == 0:
-      break
-    stream.write(bytes.toOpenArray(0, count - 1))
+    let n = c.read(buffer)
+    if n == 0: break
+    c.write buffer.toOpenArray(0, n - 1)
 
-proc main(ctx: sink Context) {.passive.} =
+proc report(app: App; error: ErrorCode) = logWarn("connection: " & $error)
+
+proc main() {.passive.} =
   try:
     discard initLogger()
-    let server = listen(7007)
-    defer: server.close()
-    echo "echo on :7007"
+    var listener = listen(7007)
+    echo "echo on :", listener.port
     flushFile(stdout)
-    serve(server, echoClient, ctx, report)
+    serve(listener, echoConn, App(), report)
   except ErrorCode as error:
     echo "server: ", error
 
-discard runMain(main(Context()))
+discard runMain(main())

@@ -1,7 +1,7 @@
 {.feature: "assumeSync".}
 ## Ready sockets must honor deadlines and let other tasks run without EAGAIN.
 import std/[assertions, syncio]
-import zal_net
+import zal_net/rt, zal_net/rt/cancel, zal_net/net/[tcp, server]
 import zal_net/rt/sync
 
 var turns = 0

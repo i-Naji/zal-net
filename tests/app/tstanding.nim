@@ -1,6 +1,6 @@
 ## A standing deadline bounds every read and write besides their own.
 import std/[assertions, syncio]
-import zal_net
+import zal_net/rt, zal_net/rt/cancel, zal_net/net/[tcp, server]
 import zal_net/rt/cancel as cancellation
 
 proc exercise() {.passive, raises.} =

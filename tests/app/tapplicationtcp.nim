@@ -1,6 +1,6 @@
 ## Ordinary TCP API and value-error propagation across real I/O suspension.
 import std/[assertions, syncio]
-import zal_net
+import zal_net/rt, zal_net/rt/cancel, zal_net/net/[tcp, server]
 import zal_net/rt/cancel as cancellation
 import zal_net/errors as rawerrors
 from zal_net/foundation/tcp import nativeHandle

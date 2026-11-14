@@ -1,6 +1,5 @@
 import std/[assertions, syncio, algorithm]
 import zal_net
-import zal_net/rt/sync
 
 when defined(bulk):
   const Size = 65536
@@ -13,26 +12,24 @@ type Context = ref object
   done: Event
   error: ErrorCode
 
-proc serve(listener: sink TcpListener; context: sink Context) {.passive.} =
+proc echoPeer(listener: ptr Listener; context: Context) {.passive.} =
   try:
-    let stream = listener.accept(deadline=afterMs(5000))
-    defer: stream.close()
+    var c = accept(listener[], afterMs(5000))
     var buffer = newSeq[byte](Size)
     while true:
-      let count = stream.read(buffer, deadline=afterMs(5000))
+      let count = c.read(buffer, afterMs(5000))
       if count == 0: break
-      stream.write(buffer.toOpenArray(0, count - 1), deadline=afterMs(5000))
+      c.write(buffer.toOpenArray(0, count - 1), afterMs(5000))
   except ErrorCode as error:
     context.error = error
   setEvent(addr context.done)
 
 proc main() {.passive.} =
   try:
-    let listener = listen(0, "127.0.0.1")
-    defer: listener.close()
+    var listener = listen(0, "127.0.0.1")
     let context = Context()
-    assert trySpawnTask(serve(listener, context))
-    let stream = connect("127.0.0.1", listener.port, deadline=afterMs(5000))
+    assert trySpawnTask(echoPeer(addr listener, context))
+    var c = connect("127.0.0.1", listener.port, afterMs(5000))
     var payload = newSeq[byte](Size)
     var reply = newSeq[byte](Size)
     for i in 0..<Size: payload[i] = byte(i mod 251)
@@ -40,18 +37,19 @@ proc main() {.passive.} =
     let started = monoNow()
     for round in 0..<Rounds:
       let before = monoNow()
-      stream.write(payload, deadline=afterMs(5000))
+      c.write(payload, afterMs(5000))
       var received = 0
       while received < Size:
-        let count = stream.read(reply.toOpenArray(received, Size - 1), deadline=afterMs(5000))
+        let count = c.read(reply.toOpenArray(received, Size - 1), afterMs(5000))
         assert count > 0
         received += count
       samples[round] = int64(monoNow()) - int64(before)
       assert reply == payload
     let elapsed = int64(monoNow()) - int64(started)
-    stream.close()
+    close c
     assert wait(addr context.done, afterMs(5000)) == wrReady
     assert context.error == Success
+    close listener
     samples.sort()
     echo "workers=", runtimeWorkers(), " bytes=", Size, " rounds=", Rounds,
       " elapsed_ns=", elapsed, " p50_ns=", samples[Rounds div 2],

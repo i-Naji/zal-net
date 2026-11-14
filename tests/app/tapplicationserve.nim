@@ -2,7 +2,7 @@
 ## the context and closes all accepted owners before it returns.
 import std/[assertions, syncio, atomics, ticketlocks]
 import zal_net/rt, zal_net/raw/io
-import zal_net
+import zal_net/rt, zal_net/rt/cancel, zal_net/net/[tcp, server]
 
 type Context = ref object
   lock: TicketLock

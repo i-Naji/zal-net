@@ -13,8 +13,8 @@
 # batched datagram calls (`MmsgBatch`), and the blocking calls for the
 # blocking pool (`engine/blockingio`).
 # Listening, dialing and addresses: `tryListenTcp`, `tryListenUdp`,
-# `dialEndpointInline`, endpoints, socket addresses, DNS, I/O failures, the
-# TCP owners a library hands to an application, and UDP sockets.
+# `dialEndpointInline`, endpoints, socket addresses, DNS, I/O failures and
+# the TCP owners a library hands to an application.
 # The relay engine: `Relay` blocks with one pump per direction, framers,
 # handshake helpers and `acceptEach`.
 # The datagram engine: one thread for every UDP listener, with listener
@@ -51,10 +51,10 @@ import zal_net/engine/blockingio
 export io, socket, fdops, mmsg, blockingio
 
 # Listening, dialing and addresses. `zal_net/raw/tcp` stays a separate
-# import: its `TcpStream`, `TcpListener` and `connect` clash with `zal_net`'s.
-import zal_net/net/[endpoint, endpointdial, sockaddr, dns, address, failure, udp]
+# import: its `connect` clashes with `zal_net`'s.
+import zal_net/net/[endpoint, endpointdial, sockaddr, dns, address, failure]
 import zal_net/foundation/tcp as owners
-export endpoint, endpointdial, sockaddr, dns, address, failure, udp, owners
+export endpoint, endpointdial, sockaddr, dns, address, failure, owners
 
 # The relay engine
 import zal_net/relay
