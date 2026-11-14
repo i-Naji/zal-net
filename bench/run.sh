@@ -7,7 +7,7 @@ WORKERS=${WORKERS:-"1 4"}
 RUNS=${RUNS:-5}
 mkdir -p "$BUILD_DIR"
 BUILD_DIR=$(cd "$BUILD_DIR" && pwd)
-for name in transport ownership loopback bulk connections; do
+for name in loopback bulk connections; do
   source=$name
   set -- --ff --mm:atomicArc -d:useMimalloc -d:release --path:src ${NIMFLAGS:-}
   if [ "$name" = bulk ]; then source=loopback; set -- "$@" -d:bulk; fi
@@ -20,8 +20,6 @@ for name in transport ownership loopback bulk connections; do
 done
 printf 'revision=%s compiler=%s\n' "$(git rev-parse HEAD)" "$NIMONY"
 uname -sm
-"$BUILD_DIR/transport"
-"$BUILD_DIR/ownership"
 for workers in $WORKERS; do
   for name in loopback bulk connections; do
     run=0

@@ -1,16 +1,16 @@
 import std/[assertions, syncio, algorithm]
-import zal_net/rt, zal_net/rt/sync
-import zal_net/net/tcp as tcp
+import zal_net
 when defined(benchTls):
+  # Build with --path:../zal-tls/src and the AWS-LC flags, and run from the
+  # zal-tls checkout: the certificates come from its tests/data.
   import zal_tls as tls
+  import zal_tls/secure
   type
-    Connection = tls.TlsStream
     ClientSetup = tls.ClientConfig
     ServerSetup = tls.ServerConfig
   const Protocol = "tls"
 else:
   type
-    Connection = tcp.TcpStream
     ClientSetup = bool
     ServerSetup = bool
   const Protocol = "tcp"
@@ -32,38 +32,34 @@ type
     error: ErrorCode
     samples: seq[int64]
 
-proc echoPeer(stream: sink Connection; peer: sink Peer) {.passive.} =
+proc echoPeer(accepted: sink Conn; peer: sink Peer) {.passive.} =
   try:
-    defer: stream.close()
+    var c = accepted
     var buffer = newSeq[byte](Size)
     while true:
-      let n = stream.read(buffer, deadline=afterMs(30000))
+      let n = c.read(buffer, afterMs(30000))
       if n == 0: break
-      stream.write(buffer.toOpenArray(0, n - 1), deadline=afterMs(30000))
+      c.write(buffer.toOpenArray(0, n - 1), afterMs(30000))
+    c.shutdownWrite()
   except ErrorCode as error: peer.error = error
   setEvent(addr peer.done)
 
-proc acceptPeers(listener: sink tcp.TcpListener; setup: ServerSetup;
+proc acceptPeers(listener: ptr Listener; setup: ServerSetup;
                  peers: sink seq[Peer]; accepted: sink Peer) {.passive.} =
   try:
     for peer in peers:
+      var c = accept(listener[], afterMs(30000))
       when defined(benchTls):
-        var socket: nil tcp.TcpStream = listener.accept(deadline=afterMs(30000))
-        let stream = tls.wrapOwned(setup, socket, deadline=afterMs(30000))
-      else:
-        let stream = listener.accept(deadline=afterMs(30000))
-      assert trySpawnTask(echoPeer(stream, peer))
+        c.secure(setup, afterMs(30000))
+      assert trySpawnTask(echoPeer(c, peer))
   except ErrorCode as error: accepted.error = error
   setEvent(addr accepted.done)
 
 proc exchange(port: uint16; setup: ClientSetup; client: sink Client) {.passive.} =
   try:
+    var c = connect("127.0.0.1", port, afterMs(30000))
     when defined(benchTls):
-      let stream = tls.connect(setup, "127.0.0.1", port,
-                               serverName="test.example", deadline=afterMs(30000))
-    else:
-      let stream = tcp.connect("127.0.0.1", port, deadline=afterMs(30000))
-    defer: stream.close()
+      c.secure(setup, "test.example", afterMs(30000))
     var payload = newSeq[byte](Size)
     var reply = newSeq[byte](Size)
     for i in 0..<Size: payload[i] = byte(i mod 251)
@@ -72,14 +68,18 @@ proc exchange(port: uint16; setup: ClientSetup; client: sink Client) {.passive.}
     assert wait(addr client.start, afterMs(30000)) == wrReady
     for round in 0..<Rounds:
       let started = monoNow()
-      stream.write(payload, deadline=afterMs(30000))
+      c.write(payload, afterMs(30000))
       var got = 0
       while got < Size:
-        let n = stream.read(reply.toOpenArray(got, Size - 1), deadline=afterMs(30000))
+        let n = c.read(reply.toOpenArray(got, Size - 1), afterMs(30000))
         assert n > 0
         got += n
       client.samples[round] = int64(monoNow()) - int64(started)
       assert reply == payload
+    # Each side half-closes and reads the other's end. A secured Conn that
+    # is dropped without shutdownWrite leaves its peer waiting for the end.
+    c.shutdownWrite()
+    assert c.read(reply, afterMs(30000)) == 0
   except ErrorCode as error: client.error = error
   setEvent(addr client.ready)
   setEvent(addr client.done)
@@ -98,15 +98,14 @@ proc main() {.passive.} =
     else:
       let clientSetup = false
       let serverSetup = false
-    let listener = tcp.listen(0, "127.0.0.1")
-    defer: listener.close()
+    var listener = listen(0, "127.0.0.1")
     var peers: seq[Peer] = @[]
     var clients: seq[Client] = @[]
     for i in 0..<Connections:
       peers.add Peer()
       clients.add Client()
     let accepted = Peer()
-    assert trySpawnTask(acceptPeers(listener, serverSetup, peers, accepted))
+    assert trySpawnTask(acceptPeers(addr listener, serverSetup, peers, accepted))
     for client in clients:
       assert trySpawnTask(exchange(listener.port, clientSetup, client))
     for client in clients:
@@ -123,6 +122,7 @@ proc main() {.passive.} =
       assert peer.error == Success
     assert wait(addr accepted.done, afterMs(30000)) == wrReady
     assert accepted.error == Success
+    close listener
     var samples: seq[int64] = @[]
     for client in clients:
       let taken = client.samples
