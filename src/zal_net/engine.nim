@@ -60,6 +60,10 @@ export endpoint, endpointdial, sockaddr, dns, address, failure
 import zal_net/relay
 export relay
 
+# The stop order of a service with several accept loops.
+import zal_net/engine/service
+export service
+
 # The datagram engine
 import zal_net/datagram
 export datagram
