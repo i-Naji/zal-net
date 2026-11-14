@@ -3,8 +3,8 @@
 Networking for Nimony: TCP, Unix-domain and UDP sockets, a server loop with
 one task per connection, cancellation tokens and the runtime they run on.
 Protocol libraries import `zal_net/engine` for descriptors, the relay and the
-datagram engine. Raw IP, ICMP, TUN/TAP and datagram batches are separate
-imports.
+datagram engine; [the engine tier](docs/engine.md) shows how to build one.
+Raw IP, ICMP, TUN/TAP and datagram batches are separate imports.
 
 ```nim
 import std/syncio

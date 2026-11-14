@@ -33,7 +33,8 @@ server: reads and writes on a descriptor in the caller's frame, readiness
 parks, listening and dialing by descriptor, endpoints, the relay and the
 datagram engine. The two import together without clashes. `zal_net/raw/*`
 holds the rest: raw TCP, Unix and UDP owners, datagram batches, IP, ICMP and
-TUN/TAP.
+TUN/TAP. [Protocol libraries on the engine tier](engine.md) shows how a
+library uses the second import.
 
 ## Ownership
 
