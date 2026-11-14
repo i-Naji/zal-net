@@ -2,12 +2,6 @@
 ## Read/write results are positive byte counts, zero EOF (or a zero-length
 ## operation), or one of these negative results. Decode errors without allocating.
 
-type IoFailure* = object
-  ## Snapshot of the last operation in one direction. No borrowed storage.
-  code*: int
-  transferred*: int
-
-
 const
   NetErrorBase* = -100_000
   StreamEof* = NetErrorBase - 1

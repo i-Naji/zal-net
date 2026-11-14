@@ -93,10 +93,6 @@ proc closingSlot(fd: cint): int =
   let i = listenerSlot(fd)
   if i >= 0 and atomicLoad(gLsn[i].stopped, moAcquire) != 0: result = i
 
-proc listenerClosing*(fd: cint): bool {.inline.} =
-  ## Ownership transfer is forbidden while serving-loop acknowledgements remain.
-  closingSlot(fd) >= 0
-
 proc closedResult(fd: cint): int =
   ## AcceptClosed, acknowledged once per accept loop when closeListener
   ## waits for it.

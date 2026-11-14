@@ -120,7 +120,7 @@ them changes as follows.
 | `stream.close()`, `retire(owner)`, `closeNow(owner)` | `close c`, or the end of the scope |
 | `halfClose(owner)` | `shutdownWrite(c)` |
 | `deadline(stream)`, `renew(stream, d)` | `renew(c, d)` |
-| `lastReadFailure`, `lastWriteFailure`, `IoResult` | the raised `ErrorCode` |
+| `lastReadFailure`, `lastWriteFailure`, `IoResult`, `IoFailure` | the raised `ErrorCode` |
 | a `cancel` token per call | the connection's token, `cancelToken(c)` |
 | `serve(listener, handler, ctx, onError)` with `handler(stream: TcpStream; ctx)` | `serve(listener, handler, ctx, onError)` with `handler(c: var Conn; ctx)`; cancel the listener's `stop` token to end it |
 | `zal_net/raw/serve` and `ContextHandler` | `serve` |
@@ -131,12 +131,12 @@ them changes as follows.
 | `BufReader` (`zal_net/reader`): `readLine`, `readUntil`, `readExactly` | `Conn`: `readLine`, `fill`, `peek`, `consume` |
 | `withTcp`, `withUnix`, `withUdp`, `withListener` (`net/scoped`) | the end of the value's scope |
 | `OwnerLife`, `beginBorrow`, `drainClose` (`ownership`) | none: one task uses a `Conn` at a time |
-| `Transport`, `retainTransport`, `ownTransport`, `tcpTransport`, `unsafeBorrowStream` over an owner | a `Layer` installed on a `Conn` with `install`, as zal-tls's `secure` does |
+| `Transport`, `retainTransport`, `ownTransport`, `tcpTransport`, `unsafeBorrowStream` over an owner | a layer (a context, a `StreamOps` table and a release proc) put on a `Conn` with `install`, as zal-tls's `secure` does |
 | `ByteStream`, `DuplexStream` (`zal_net/streamconcepts`) | the same concepts in `zal_net/net/stream` |
 | the datagram engine's `Listener` | `DatagramListener` |
 | `zal_net/foundation/readiness` | the datagram engine's own, in `private/datagram` |
 | `TcpConnRef` and the old UDP sockets from `zal_net/engine` | a descriptor, or `initConn(fd, deadline)` to hand it to a program |
 
-zal-tls still imports `net/tcp`, `net/tcpview`, `net/transport`,
-`foundation/tcp`, `foundation/tcplistener`, `ownership` and `io`. They stay
-until zal-tls moves to `Conn`; new code does not use them.
+`net/tcp`, `net/tcpview`, `net/transport`, `foundation/tcp`,
+`foundation/tcplistener`, `ownership` and `io` went last, once zal-tls had
+moved to `Conn`.

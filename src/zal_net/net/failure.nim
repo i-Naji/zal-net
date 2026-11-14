@@ -5,8 +5,6 @@ from zal_net/rt/time import IoTimedOut, ECancelled
 when not defined(windows):
   from std/errorcodes/errorcodes_posix import posixToErrorCode
 
-export errors.IoFailure
-
 proc errorKind*(code: int): ErrorCode =
   ## Classify a raw failure without discarding the original code at its owner.
   case code

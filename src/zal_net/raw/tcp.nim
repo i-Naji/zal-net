@@ -78,11 +78,6 @@ proc takeTcp*(s: TcpStreamPtr): TcpStream =
   result = s[]
   s.socket = default(SocketOwner)
 
-proc takeTcpListener*(l: TcpListenerPtr): TcpListener =
-  ## Transfer only when no accept or serving-loop close still borrows this owner.
-  result = l[]
-  l.socket = default(SocketOwner)
-
 proc adoptTcp*(s: TcpStreamPtr; descriptor: var cint; timeoutMs = DefaultTimeoutMs): bool =
   ## Adopt a nonblocking connected socket. On success descriptor becomes -1;
   ## on failure both owners are unchanged. The stream must already be closed.

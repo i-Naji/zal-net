@@ -40,3 +40,4 @@
 - `zal_net` exports the application tier: `Conn`, `Listener`, `serve`, `UdpSocket`, the runtime, tokens, events, deadlines, addresses, signals and the log. Protocol libraries import `zal_net/engine`, which no longer exports the old TCP owners or `net/udp`.
 - The datagram engine's `Listener` is `DatagramListener`.
 - Removed `net/unix`, `net/udp`, `net/server`, `net/scoped`, `raw/serve`, `foundation/udp`, `foundation/unix`, `foundation/unixlistener`, the `foundation` module, `BufReader` (`zal_net/reader`) and the unused admission gate. The stream concepts live in `net/stream`; the datagram engine's readiness in `private/datagram`.
+- Removed `net/tcp`, `net/tcpview`, `net/transport`, `foundation/tcp`, `foundation/tcplistener`, `ownership`, `io` and `IoFailure`, which only zal-tls still used before it moved to `Conn`, and with them `listenerClosing` (`raw/io`) and `takeTcpListener` (`raw/tcp`).
