@@ -21,7 +21,7 @@
 # A failure is never in the return value. `fill` and `read` answer how many
 # bytes arrived, and 0 means the peer finished, which is an end and not an
 # error. Everything else raises an `ErrorCode`: `TimeoutError` when the
-# deadline came first, `CancelledError` when the token was cancelled.
+# deadline came first, `AbortedOperation` when the token was cancelled.
 #
 # ## Why the parking operations are templates
 #
@@ -320,7 +320,7 @@ proc stopToken*(l: Listener): nil CancelToken {.inline.} = l.stop
 proc tunesNoDelay*(l: Listener): bool {.inline.} = l.noDelay
 
 template accept*(l: var Listener; dl: Deadline = never): Conn =
-  ## The next connection. Raises `TimeoutError` at `dl` and `CancelledError`
+  ## The next connection. Raises `TimeoutError` at `dl` and `AbortedOperation`
   ## when the listener's token was cancelled.
   block:
     var s = default(rawtcp.TcpStream)
