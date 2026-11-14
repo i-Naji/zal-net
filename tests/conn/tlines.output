@@ -1,1 +1,1 @@
-PASS readLine across lengths, LF, CRLF, no line end, a NUL and the end
+PASS readLine across lengths and line ends, a mixed stream, an expired fill, a line too long

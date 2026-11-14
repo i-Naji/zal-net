@@ -13,6 +13,5 @@ conn/tudpdeadline
 conn/tserve
 conn/tservedrain
 raw/tdefaults
-values/treaderresults
 raw/tviewcancel
 runtime/tservicedrain

@@ -2,9 +2,7 @@
 ## Streams: a TCP relay (splice on Linux, and the plain path) carries
 ## 4 MiB each way intact and forwards the half-close; a Unix-to-TCP relay
 ## (two stream types); a quiet direction outlives its stream's own idle
-## limit while the other moves, and the relay ends once both are idle;
-## BufReader lines (CRLF, LF, a last line without one, too long), a
-## delimited head, then an exact body.
+## limit while the other moves, and the relay ends once both are idle.
 import std/assertions
 import std/syncio
 import zal_net/rt
@@ -164,15 +162,6 @@ proc quietProxy(s: TcpStreamPtr): int {.passive.} =
   close(addr up)
   result = 0
 
-# ---------------------------------------------------------- BufReader
-
-proc bufServer(s: TcpStreamPtr): int {.passive.} =
-  discard write(s, "first\r\nsecond\n\r\nHEAD: x\r\n\r\nbody12345" & "0123456789abcdef" & "\nlast")
-  shutdownWrite(s)
-  var buf = default(array[16, byte])
-  discard recv(s, buf)
-  result = 0
-
 proc main() {.passive.} =
   checkReadyFairness()
   var back = listenTcp(0, "127.0.0.1")
@@ -233,40 +222,6 @@ proc main() {.passive.} =
   close(addr q)
   echo "PASS a quiet direction outlived its 100 ms stream limit; idle after ", waited, " ms"
 
-  var bl = listenTcp(0, "127.0.0.1")
-  serve(bl, bufServer)
-  var bs = connect(initSocketAddress(loopback4(), port(bl)))
-  var r = initBufReader(addr bs, 64)
-  var line = ""
-  assert readLine(addr r, addr line) == 5 and line == "first"
-  let pending = buffered(addr r)
-  assert pending > 0
-  assert readLine(addr r, addr line, deadline = afterMs(-1)) == IoTimedOut
-  assert buffered(addr r) == pending
-  var expiredByte = 0'u8
-  assert recvInto(addr r, addr expiredByte, 1, deadline = afterMs(-1)) == IoTimedOut
-  assert buffered(addr r) == pending
-  assert readLine(addr r, addr line) == 6 and line == "second"
-  assert readLine(addr r, addr line) == 0 and line == ""
-  let h = readUntil(addr r, "\r\n\r\n")
-  assert h == 11, $h
-  block:
-    let head = peek(r)
-    assert head.len >= h and head[0] == byte('H')
-  consume(r, h)
-  var body = default(array[25, byte])
-  let exact = readExactly(r, body)
-  assert exact.bytes == body.len and exact.error == 0
-  assert body[0] == byte('b') and body[24] == byte('f')
-  assert readLine(addr r, addr line) == 0          # the "\n" after the body
-  assert readLine(addr r, addr line) == 4 and line == "last"
-  assert readLine(addr r, addr line) == StreamEof
-  close(addr bs)
-  var bs2 = connect(initSocketAddress(loopback4(), port(bl)))
-  var r2 = initBufReader(addr bs2, 64)
-  assert readLine(addr r2, addr line, maxLen = 3) == TooLong
-  close(addr bs2)
-  echo "PASS BufReader: CRLF and LF lines, a delimited head, an exact body, a last line, too long"
   quit 0
 
 initRuntime()

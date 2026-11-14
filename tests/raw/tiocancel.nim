@@ -62,10 +62,6 @@ proc main() {.passive.} =
   var empty = default(array[0, byte])
   assert recvInto(addr server, empty, afterMs(1)) == 0, "tiocancel check 63"
   assert sendFrom(addr server, empty, afterMs(1)) == 0, "tiocancel check 64"
-  var reader = initBufReader(addr server, 32)
-  let before = monoNow()
-  assert readUntil(addr reader, "", deadline = afterMs(500)) == InvalidInput, "tiocancel check 67"
-  assert int64(monoNow()) - int64(before) < 100_000_000, "tiocancel check 68"
 
   # Deadline expiry on accept is also local to that wait.
   assert not accept(listener, deadline = afterMs(10)).isOpen, "tiocancel check 71"

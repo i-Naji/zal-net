@@ -1,1 +1,1 @@
-PASS copy/buffered-read owner reuse, bounds, adapter rejection and relay drain
+PASS copy and read owner reuse after cancellation, adapter rejection and relay drain

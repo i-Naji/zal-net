@@ -3,17 +3,14 @@
   ## error ends both. Idle means neither direction moved for `idleMs` (0: no
   ## limit). The caller still owns and closes both streams. Cancel with a
   ## token or `interrupt` on either stream; both pumps are drained first.
-import zal_net/reader
-export reader
-import zal_net/streamconcepts
-export streamconcepts
 import zal_net/errors
-export StreamEof, TooLong
+export errors
+import zal_net/rt/[time, cancel]
+export time, cancel
 ## Byte streams in general: the `ByteStream` and `DuplexStream` concepts
-## (TcpStream and UnixStream satisfy both), `copy` and `relay` between any
-## two, and `BufReader` for lines, delimited heads or exact lengths. Generic
-## procs are instantiated per stream type, with no vtable; between two
-## sockets on Linux, `copy` and `relay` splice(2) through a pipe.
+## (TcpStream and UnixStream satisfy both), and `copy` and `relay` between
+## any two. Generic procs are instantiated per stream type, with no vtable;
+## between two sockets on Linux, `copy` and `relay` splice(2) through a pipe.
 ##
 ## ```nim
 ## # A TCP forwarder: whatever connects to :8080 is relayed to :80.
@@ -36,6 +33,31 @@ import zal_net/rt/cancel
 import zal_net/private/core/iocancel
 
 import zal_net/private/sys/splice
+
+type
+  ByteStream* = concept
+    ## Reads and writes with the stream's own results: >0 bytes, 0 end of
+    ## stream (reads), <0 an error or IoTimedOut. Either may move fewer
+    ## bytes than asked.
+    proc recvInto(s: Self; p: pointer; n: int; deadline: Deadline): int {.passive.}
+    proc sendFrom(s: Self; p: pointer; n: int; deadline: Deadline): int {.passive.}
+
+  DuplexStream* = concept
+    ## A ByteStream that can end its sending side alone (the peer reads
+    ## end of stream, reading goes on) and be interrupted: whatever is
+    ## parked on it wakes and fails.
+    proc recvInto(s: Self; p: pointer; n: int; deadline: Deadline): int {.passive.}
+    proc sendFrom(s: Self; p: pointer; n: int; deadline: Deadline): int {.passive.}
+    proc shutdownWrite(s: Self)
+    proc interrupt(s: Self)
+
+  CancellableByteStream* = concept
+    ## Token-aware custom streams keep their owner usable after a cancelled
+    ## wait. A copy/relay with a token rejects unsupported streams before I/O.
+    proc recvInto(s: Self; p: pointer; n: int; deadline: Deadline;
+                  tok: nil CancelToken): int {.passive.}
+    proc sendFrom(s: Self; p: pointer; n: int; deadline: Deadline;
+                  tok: nil CancelToken): int {.passive.}
 
 
 type

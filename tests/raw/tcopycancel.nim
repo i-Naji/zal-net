@@ -54,31 +54,15 @@ proc main() {.passive.} =
   assert recvInto(addr source, received, afterMs(2000)) == 1 and received == payload
   assert sendFrom(addr destination, payload) == 1
   assert recvInto(addr downstream, received, afterMs(2000)) == 1 and received == payload
-  var reader = initBufReader(addr source, 64)
-  var empty = default(array[0, byte])
-  assert recvInto(addr reader, empty) == 0
-  assert recvInto(addr reader, addr received[0], -1) == InvalidInput
-  assert not readExactly(addr reader, addr received[0], -1)
-  var line = "unchanged"
-  assert readLine(addr reader, addr line, maxLen = high(int)) == InvalidInput
-  assert line == "unchanged"
   let readToken = newCancelToken()
   var readDone = default(Event)
   retain(readToken)
   assert trySpawnTask(cancelSoon(readToken, addr readDone))
-  assert recvInto(addr reader, received, afterMs(2000), readToken) == ECancelled
+  assert recvInto(addr source, received, afterMs(2000), readToken) == ECancelled
   assert wait(addr readDone, afterMs(2000)) == wrReady
   release(readToken)
   assert sendFrom(addr upstream, payload) == 1
-  assert fill(addr reader, afterMs(2000)) == 1
-  consume(addr reader, -1)
-  assert buffered(addr reader) == 1
-  let stoppedRead = newCancelToken()
-  cancel(stoppedRead)
-  assert recvInto(addr reader, received, tok = stoppedRead) == ECancelled
-  assert buffered(addr reader) == 1
-  release(stoppedRead)
-  assert readExactly(addr reader, received) and received == payload
+  assert recvInto(addr source, received, afterMs(2000)) == 1 and received == payload
   let relayToken = newCancelToken()
   var relayDone = default(Event)
   retain(relayToken)
@@ -93,6 +77,6 @@ proc main() {.passive.} =
   close(addr downstream)
   closeNow(listener)
   assert liveCancelTokens() == baseline
-  echo "PASS copy/buffered-read owner reuse, bounds, adapter rejection and relay drain"
+  echo "PASS copy and read owner reuse after cancellation, adapter rejection and relay drain"
 
 assert runMain(main())
