@@ -1,0 +1,2 @@
+PASS plain <-> plain over TCP, 16 MiB each way, half-close
+PASS the connection block went back

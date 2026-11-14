@@ -10,7 +10,7 @@
 #include <sys/uio.h>
 #include <poll.h>
 #endif
-#include "../src/zal_net/private/sys/nn_types.h"
+#include "../../src/zal_net/private/sys/nn_types.h"
 
 #define OFF(T, f) ((long)offsetof(T, f))
 

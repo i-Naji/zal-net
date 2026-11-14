@@ -1,0 +1,2 @@
+PASS a write after shutWrite fails without SIGPIPE
+PASS a read after shutBoth reads end of stream

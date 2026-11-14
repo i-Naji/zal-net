@@ -1,0 +1,2 @@
+PASS Unix streams: echo, stale file replaced, live refused, file removed
+PASS Unix datagrams answered to the sender's path

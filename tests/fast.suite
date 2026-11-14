@@ -1,0 +1,16 @@
+# The quick check before a commit.
+runtime/tcontinuations
+runtime/tcompletiondrain
+app/treadyio
+owners/townership
+owners/ttcpref
+owners/tunixref
+app/tapplicationtcp
+app/tapplicationunix
+app/tapplicationudp
+owners/tudpdeadline
+app/tapplicationserve
+values/treaderresults
+owners/ttransport
+owners/ttransportcancel
+runtime/tservicedrain

@@ -5,7 +5,7 @@ import zal_net/[rt, io]
 import zal_net/net/transport
 import zal_net/unsafe/refcontext
 import zal_net/rt/sync
-import ../examples/headers
+import ../../examples/headers
 
 var destroyed, closes: int
 var writeStarted, writeContinue, writeDone: Event

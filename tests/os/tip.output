@@ -1,0 +1,2 @@
+SKIP raw sockets need privileges here (not permitted)
+PASS the unprivileged ICMP datagram socket

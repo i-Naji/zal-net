@@ -1,0 +1,5 @@
+PASS result
+PASS abandoned on timeout
+PASS cancelled
+PASS inbox
+PASS posted messages arrive in order, each once

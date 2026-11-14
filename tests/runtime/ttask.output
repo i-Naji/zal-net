@@ -1,0 +1,3 @@
+PASS join
+PASS cancel and join
+PASS scope waitAll, close and rejection after close

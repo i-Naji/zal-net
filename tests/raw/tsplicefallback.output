@@ -1,0 +1,1 @@
+SKIP deterministic splice-output fault requires Linux -d:nnStreamFaultTest

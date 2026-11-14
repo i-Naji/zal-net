@@ -1,0 +1,5 @@
+# Flags for every test of this repository. See tools/tester.nim.
+--path:src
+--mm:atomicArc
+-d:useMimalloc
+linux: --passL:-lpthread
