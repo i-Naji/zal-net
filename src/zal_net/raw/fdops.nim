@@ -11,11 +11,10 @@ import zal_net/rt/cancel
 import zal_net/private/core/iocancel
 import zal_net/private/core/udpops
 import zal_net/raw/io
-import zal_net/private/sys/posix
+import zal_net/private/os
 import zal_net/net/sockaddr
 import zal_net/raw/socket
 import zal_net/net/address
-import zal_net/private/sys/sock
 
 
 const

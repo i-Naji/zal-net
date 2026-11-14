@@ -53,8 +53,7 @@ import zal_net/rt
 import zal_net/raw/io
 import zal_net/buffers
 import zal_net/storage
-import zal_net/private/sys/posix
-import zal_net/private/sys/sock
+import zal_net/private/os
 import zal_net/net/sockaddr
 import zal_net/raw/socket
 import zal_net/private/sys/splice

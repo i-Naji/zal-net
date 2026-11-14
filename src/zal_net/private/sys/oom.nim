@@ -7,7 +7,7 @@
 ## stderr without allocating and exits with status 1. To go on instead, call
 ## `setOomHandler(continueAfterOutOfMem)` after `initRuntime`.
 
-import zal_net/private/sys/sock
+import zal_net/private/os
 
 proc cExit(code: cint) {.importc: "exit", header: "<stdlib.h>".}
 

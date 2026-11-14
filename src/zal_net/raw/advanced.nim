@@ -11,7 +11,7 @@
 import zal_net/net/sockaddr
 import zal_net/net/address
 import zal_net/net/options
-import zal_net/private/sys/sock
+import zal_net/private/os
 
 when defined(macosx):
   proc ifNametoindex(name: cstring): cuint {.importc: "if_nametoindex", header: "<net/if.h>".}

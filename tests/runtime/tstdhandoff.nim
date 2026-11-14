@@ -4,7 +4,7 @@ import std/[atomics, threadpool]
 import zal_net/rt
 import zal_net/private/runtime
 import zal_net/private/core/waitq
-import zal_net/private/sys/sock
+import zal_net/private/os
 
 var completed: int
 proc mainLane(armed: bool) {.passive.} =

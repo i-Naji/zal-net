@@ -11,7 +11,7 @@ import std/ticketlocks
 import zal_net/private/core/waitq
 import zal_net/rt
 
-import zal_net/private/sys/sock
+import zal_net/private/os
 import zal_net/private/sharedmem
 
 var liveTokens: int

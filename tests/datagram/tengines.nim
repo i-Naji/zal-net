@@ -3,7 +3,7 @@ import std/[atomics, assertions, syncio]
 import zal_net/rt/blocking
 # Internal lifecycle test: inject a held producer without exporting the inbox.
 include zal_net/datagram/engine
-import zal_net/private/sys/sock
+import zal_net/private/os
 
 var entered, proceed: int
 proc held(j: JobPtr) {.nimcall.} =

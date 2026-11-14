@@ -9,7 +9,7 @@ import zal_net/raw/io
 import zal_net/rt/signals
 
 when defined(windows):
-  import zal_net/private/sys/sock
+  import zal_net/private/os
 
   proc main() {.passive.} =
     assert watchSignals({sigInt})

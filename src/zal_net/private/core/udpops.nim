@@ -4,7 +4,7 @@
 import std/oserrors
 import zal_net/[rt, errors], zal_net/raw/io
 import zal_net/net/[address, sockaddr], zal_net/raw/mmsg
-import zal_net/private/sys/[sock, posix]
+import zal_net/private/os
 import zal_net/private/sys/[dgram, types]
 import zal_net/net/datagraminfo
 import zal_net/private/core/iocancel

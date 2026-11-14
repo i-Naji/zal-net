@@ -6,10 +6,9 @@
 ## before 4.18, or a kernel that refuses it) a run is sent datagram by
 ## datagram.
 
-import zal_net/private/sys/posix
+import zal_net/private/os
 import zal_net/net/sockaddr
 import zal_net/raw/mmsg
-import zal_net/private/sys/sock
 
 const
   GsoCap* = 65000            # bytes per segmented send

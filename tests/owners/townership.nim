@@ -3,7 +3,7 @@
 import std/[assertions, syncio]
 import zal_net/[rt, errors], zal_net/raw/io
 import zal_net/raw/[tcp, unix, udp, ip, tun]
-import zal_net/private/sys/[sock, posix]
+import zal_net/private/os
 import zal_net/ownership
 
 proc checkDefaults() {.passive.} =

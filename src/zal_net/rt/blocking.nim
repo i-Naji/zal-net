@@ -22,7 +22,7 @@ import zal_net/private/core/eventcount
 import zal_net/private/core/mailbox
 import zal_net/private/sys/threads
 import zal_net/private/sys/env
-import zal_net/private/sys/sock
+import zal_net/private/os
 
 const
   jsQueued = 0

@@ -2,7 +2,7 @@
 import std/[assertions, syncio, envvars]
 import zal_net/[rt, errors]
 import zal_net/foundation/tcp, zal_net/foundation/tcplistener, zal_net/foundation/udp, zal_net/foundation/unix, zal_net/net/scoped, zal_net/raw/unix
-import zal_net/private/sys/sock
+import zal_net/private/os
 
 proc earlyTcp(conn: TcpConnRef) {.passive.} =
   withTcp(conn):

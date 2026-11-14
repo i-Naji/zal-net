@@ -21,13 +21,12 @@ import zal_net/private/socketowner
 import std/oserrors
 import zal_net/rt
 import zal_net/raw/io
-import zal_net/private/sys/posix
+import zal_net/private/os
 import zal_net/net/sockaddr
 import zal_net/raw/socket
 import zal_net/raw/mmsg
 import zal_net/net/address
 import zal_net/raw/fdops
-import zal_net/private/sys/sock
 import zal_net/private/sys/dgram
 import zal_net/net/datagraminfo
 export datagraminfo

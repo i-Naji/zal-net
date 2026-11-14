@@ -1,7 +1,7 @@
 ## Shutdown drains queued work and retains workers held in a blocking OS call.
 import std/[atomics, assertions, syncio]
 import zal_net/rt/blocking
-import zal_net/private/sys/sock
+import zal_net/private/os
 
 var entered, proceed, completed: int
 proc held(j: JobPtr) {.nimcall.} =

@@ -3,7 +3,7 @@ import std/[assertions, envvars, syncio]
 import zal_net/rt, zal_net/errors
 import zal_net/raw/unix
 import zal_net/foundation/unixlistener
-from zal_net/private/sys/sock import getPid
+from zal_net/private/os import getPid
 
 proc main() {.passive.} =
   when defined(windows):

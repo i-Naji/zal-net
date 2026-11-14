@@ -1,8 +1,8 @@
 ## Owned sockets parked on their real deadline. Owner close interrupts the
 ## socket; runtime stop shuts down every socket recorded here, once.
 import std/atomics
-from zal_net/private/sys/sock import sockShutdown
-import zal_net/private/sys/posix
+from zal_net/private/os import sockShutdown
+import zal_net/private/os
 import zal_net/private/sharedmem
 
 const ParkedLimit = 1 shl 21

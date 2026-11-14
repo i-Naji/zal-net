@@ -1,7 +1,8 @@
 ## Atomic admission, typed storage, and draining pooled mapped blocks.
 import std/[assertions, atomics, syncio]
 import zal_net/relay/conn
-import zal_net/private/sys/[threads, sock]
+import zal_net/private/os
+import zal_net/private/sys/threads
 
 type UserState = object
   value: uint64

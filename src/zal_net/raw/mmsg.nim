@@ -5,7 +5,7 @@
 import std/assertions
 from zal_net/errors import InvalidInput
 import zal_net/net/sockaddr
-import zal_net/private/sys/posix
+import zal_net/private/os
 
 {.compile: "../private/sys/nn_udp.c".}
 

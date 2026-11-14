@@ -8,8 +8,8 @@ import std/atomics
 import std/ticketlocks
 import std/stripes
 from std/rawthreads import getThreadId
-from zal_net/private/sys/sock import sleepUs, PollFd, PollIn, PollOut, sockPoll
-from zal_net/private/sys/posix import fdLimits
+from zal_net/private/os import sleepUs, PollFd, PollIn, PollOut, sockPoll
+from zal_net/private/os import fdLimits
 from zal_net/private/sys/env import tasksFromEnv, MaxTasks
 import std/threadpool
 import std/ioring

@@ -28,11 +28,10 @@ export StreamEof, TooLong
 import zal_net/rt
 import zal_net/raw/io
 import zal_net/rt/sync
-import zal_net/private/sys/posix
+import zal_net/private/os
 import zal_net/raw/fdops
 import zal_net/raw/tcp
 import zal_net/raw/unix
-import zal_net/private/sys/sock
 import zal_net/rt/cancel
 import zal_net/private/core/iocancel
 

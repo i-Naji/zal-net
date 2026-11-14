@@ -3,7 +3,7 @@
 import std/[assertions, syncio, envvars]
 import zal_net/[rt, errors], zal_net/rt/[sync, cancel]
 import zal_net/raw/unix, zal_net/foundation/unix
-import zal_net/private/sys/sock
+import zal_net/private/os
 
 var entered = default(Event)
 var finished = default(Event)

@@ -14,7 +14,7 @@ import std/atomics
 import zal_net/errors
 import zal_net/rt
 import zal_net/raw/io
-import zal_net/private/sys/posix
+import zal_net/private/os
 import zal_net/net/sockaddr
 import zal_net/raw/socket
 import zal_net/net/resolve
@@ -22,7 +22,6 @@ import zal_net/net/address
 import zal_net/raw/ip
 import zal_net/rt/sync
 import zal_net/rt/blocking
-import zal_net/private/sys/sock
 
 const
   PingNoHost* = NetErrorBase - 20             ## the name did not resolve

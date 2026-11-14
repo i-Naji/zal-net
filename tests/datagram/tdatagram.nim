@@ -12,9 +12,8 @@ import std/syncio
 import std/atomics
 import zal_net/rt
 import zal_net/raw/io
-import zal_net/private/sys/posix
+import zal_net/private/os
 import zal_net/private/sys/threads
-import zal_net/private/sys/sock
 import zal_net/net/sockaddr
 import zal_net/raw/socket
 import zal_net/net/endpoint

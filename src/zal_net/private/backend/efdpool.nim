@@ -1,5 +1,5 @@
 ## Wake descriptors for the std backend's wait nodes: an eventfd on Linux,
-## a sys/sock wake pair elsewhere (a pipe, or a loopback socket on Windows). A waiter parks on the read side with
+## an os wake pair elsewhere (a pipe, or a loopback socket on Windows). A waiter parks on the read side with
 ## `submitPollAdd`, so whoever claims it wakes the waiter's own lane at once;
 ## std/threadpool itself wakes nobody when work is submitted. Leases are
 ## pooled; a descriptor returns to the pool drained. Leased descriptors are
@@ -7,7 +7,7 @@
 
 import std/atomics
 import std/ticketlocks
-import zal_net/private/sys/sock
+import zal_net/private/os
 import zal_net/private/core/parked
 
 when defined(linux):

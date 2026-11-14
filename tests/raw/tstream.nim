@@ -16,7 +16,7 @@ import zal_net/net/stream
 import zal_net/rt/sync
 
 import std/envvars
-import zal_net/private/sys/sock
+import zal_net/private/os
 
 proc tmpDir(): string =
   when defined(windows): getEnv("TEMP") & "\\"

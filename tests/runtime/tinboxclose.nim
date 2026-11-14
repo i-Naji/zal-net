@@ -1,7 +1,7 @@
 ## Closing a consumer with jobs still running must not leak or use its wrapper.
 import std/[atomics, assertions, syncio]
 import zal_net/rt, zal_net/rt/blocking, zal_net/raw/io
-import zal_net/private/sys/sock
+import zal_net/private/os
 
 var entered, proceed, disposed, dropped: int
 proc runHeld(j: JobPtr) {.nimcall.} =

@@ -10,7 +10,7 @@ import std/syncio
 import zal_net/rt
 import zal_net/raw/io
 import zal_net/net/[sockaddr, endpoint, dial], zal_net/raw/socket
-import zal_net/private/sys/sock
+import zal_net/private/os
 
 var dialed: cint = -2
 var dialConnected = false

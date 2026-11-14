@@ -10,8 +10,7 @@ import std/atomics
 when defined(nnTraceRelay):
   import std/syncio
 import zal_net/rt
-import zal_net/private/sys/posix
-import zal_net/private/sys/sock
+import zal_net/private/os
 import zal_net/net/sockaddr
 
 const

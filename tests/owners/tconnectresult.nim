@@ -4,7 +4,7 @@ import std/[assertions, syncio, envvars]
 import zal_net/[rt, errors], zal_net/rt/[sync, cancel, blocking]
 import zal_net/raw/[tcp, unix, socket], zal_net/foundation/tcp, zal_net/foundation/unix, zal_net/net/address, zal_net/net/sockaddr
 import zal_net/net/dns as resolver
-import zal_net/private/sys/sock
+import zal_net/private/os
 
 var evaluated = 0
 proc hostName(): string =

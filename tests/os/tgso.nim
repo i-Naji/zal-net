@@ -10,7 +10,7 @@ import zal_net/raw/mmsg
 import zal_net/raw/io
 import zal_net/raw/gso
 
-import zal_net/private/sys/sock
+import zal_net/private/os
 
 proc receiver(): (cint, SockAddrBuf) =
   var fam = AF_INET

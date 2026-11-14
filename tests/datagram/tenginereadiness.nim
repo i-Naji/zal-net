@@ -2,7 +2,7 @@
 import std/[assertions, syncio]
 import zal_net/rt
 import zal_net/raw/io
-import zal_net/private/sys/sock
+import zal_net/private/os
 import zal_net/foundation/readiness
 
 proc main() {.passive.} =

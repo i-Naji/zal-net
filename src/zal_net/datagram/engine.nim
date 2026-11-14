@@ -28,7 +28,7 @@ import zal_net/net/endpointdial
 
 import std/[atomics, syncio]
 import zal_net/rt
-import zal_net/private/sys/posix
+import zal_net/private/os
 import zal_net/private/sys/threads
 import zal_net/net/sockaddr
 import zal_net/raw/socket
@@ -40,7 +40,6 @@ import zal_net/rt/blocking
 import zal_net/net/endpoint
 import zal_net/private/datagram/index
 import zal_net/raw/gso
-import zal_net/private/sys/sock
 import zal_net/storage
 include zal_net/private/datagram/contracts
 

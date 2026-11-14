@@ -9,7 +9,7 @@ import zal_net/raw/socket
 import zal_net/raw/mmsg
 
 
-import zal_net/private/sys/sock
+import zal_net/private/os
 proc sleepMsBlocking(ms: int) = sleepUs(ms * 1000)
 
 proc recvAll(fd: cint; b: var MmsgBatch; want: int): int =

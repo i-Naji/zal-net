@@ -6,8 +6,7 @@ import zal_net/rt/sync
 import std/syncio
 import zal_net/rt
 import zal_net/raw/io
-import zal_net/private/sys/posix
-import zal_net/private/sys/sock
+import zal_net/private/os
 
 var order: array[4, int]
 var orderLen = 0

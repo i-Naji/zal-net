@@ -9,7 +9,7 @@ import zal_net/net/address
 import zal_net/raw/unix
 
 import std/envvars
-import zal_net/private/sys/sock
+import zal_net/private/os
 
 proc getpid(): int = getPid()
 

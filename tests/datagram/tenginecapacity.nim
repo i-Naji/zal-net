@@ -3,7 +3,7 @@ import std/[assertions, syncio, envvars]
 import std/atomics
 import zal_net/rt
 import zal_net/raw/io
-import zal_net/private/sys/sock
+import zal_net/private/os
 import zal_net/foundation/readiness
 
 var released, completed: int

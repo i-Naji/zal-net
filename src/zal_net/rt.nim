@@ -3,7 +3,7 @@
 import std/atomics
 from std/rawthreads import getThreadId
 import zal_net/rt/time
-import zal_net/private/sys/posix
+import zal_net/private/os
 import zal_net/private/sys/env
 import zal_net/private/sys/oom
 export time, env, oom

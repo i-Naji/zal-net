@@ -1,7 +1,7 @@
 import std/[assertions, atomics, syncio]
 import zal_net/rt
 import zal_net/private/backend/stdrt
-from zal_net/private/sys/sock import sleepUs
+from zal_net/private/os import sleepUs
 
 var calls: int
 var anchor = default(CoroutineBase)

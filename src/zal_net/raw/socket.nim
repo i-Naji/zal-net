@@ -7,12 +7,12 @@ import std/atomics
 import zal_net/rt
 import zal_net/raw/io
 import zal_net/private/core/waitq
-import zal_net/private/sys/sock
+import zal_net/private/os
 import zal_net/private/sys/types
 import zal_net/net/sockaddr
 import zal_net/errors
 import zal_net/private/sys/resolvererror
-from zal_net/private/sys/posix import ignoreSigpipe, EIntr
+from zal_net/private/os import ignoreSigpipe, EIntr
 export ignoreSigpipe   # initRuntime calls it; kept for programs that write earlier
 
 const

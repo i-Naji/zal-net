@@ -6,7 +6,7 @@ import zal_net/net/unix as local
 import zal_net/errors as rawerrors
 from zal_net/foundation/unix import nativeHandle
 import zal_net/net/options
-from zal_net/private/sys/sock import getPid
+from zal_net/private/os import getPid
 
 type AcceptContext = ref object
   entered, done: Event

@@ -6,7 +6,7 @@
 import std/assertions
 import std/syncio
 import zal_net/private/sys/types
-import zal_net/private/sys/sock
+import zal_net/private/os
 import zal_net/net/sockaddr
 import zal_net/raw/mmsg
 

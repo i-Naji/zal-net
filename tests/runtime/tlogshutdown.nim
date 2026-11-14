@@ -1,7 +1,8 @@
 ## A blocked sink must retain the logger's storage until its write completes.
 import std/[assertions, atomics, syncio]
 import zal_net/[rt, log]
-import zal_net/private/sys/[sock, threads]
+import zal_net/private/os
+import zal_net/private/sys/threads
 
 var producerDone: int
 proc publish(arg: nil pointer) {.nimcall.} =

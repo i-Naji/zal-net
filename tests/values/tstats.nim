@@ -9,7 +9,7 @@ import zal_net/raw/io
 import zal_net/stats
 import zal_net/log
 import zal_net/private/sys/threads
-import zal_net/private/sys/posix
+import zal_net/private/os
 
 when defined(windows):
   import std/envvars

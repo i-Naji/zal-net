@@ -21,7 +21,7 @@ typedef struct {
 
 #if defined(_WIN32)
 /* Windows has no iovec, pollfd, msghdr or mmsghdr. The Nim side uses the
-   Linux layouts (net/sockaddr.nim IoVec, sys/sock.nim PollFd,
+   Linux layouts (net/sockaddr.nim IoVec, private/os/common.nim PollFd,
    net/mmsg.nim MsgHdr and MmsgHdr) and nn_win.c converts. */
 typedef struct { void *base; size_t len; } nn_iovec;
 typedef struct { int32_t fd; int16_t events, revents; } nn_pollfd;

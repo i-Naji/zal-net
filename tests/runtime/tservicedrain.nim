@@ -1,7 +1,7 @@
 import std/[assertions, atomics, syncio]
 import zal_net/rt
 import zal_net/rt/blocking
-import zal_net/private/sys/sock
+import zal_net/private/os
 
 var completed: int
 proc late(job: JobPtr) {.nimcall.} =

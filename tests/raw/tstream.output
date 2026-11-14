@@ -1,6 +1,0 @@
-PASS continuously ready copy gave queued work a turn before EOF
-PASS TCP relay (splice where available): 4 MiB each way intact, half-close forwarded
-PASS TCP relay (plain): 4 MiB each way intact, half-close forwarded
-PASS Unix-to-TCP relay: 4 MiB each way
-PASS a quiet direction outlived its 100 ms stream limit; idle after 402 ms
-PASS BufReader: CRLF and LF lines, a delimited head, an exact body, a last line, too long
