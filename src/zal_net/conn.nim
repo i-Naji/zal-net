@@ -44,10 +44,11 @@ import zal_net/raw/tcp as rawtcp
 import zal_net/raw/unix as rawunix
 import zal_net/net/[address, failure]
 import zal_net/buffers
+import zal_net/unsafe/[streamview, refcontext]
 import zal_net/errors
 
 export time, cancel.CancelToken, cancel.newCancelToken, cancel.cancel, cancel.cancelled
-export address.SocketAddress
+export address.SocketAddress, streamview.StreamOps, streamview.StreamOpsPtr
 
 const
   ReadChunk* = 8 * 1024
@@ -63,6 +64,13 @@ const
     ## deadline. Here the deadline alone decides, so this is twelve days.
 
 type
+  LayerObj* = object of RootObj
+    ## What sits between a `Conn` and its descriptor: TLS, for one. A layer
+    ## owns the descriptor from the moment it is installed and closes it in
+    ## its destructor. Its operations come as a `StreamOps` table whose
+    ## context is the layer itself.
+  Layer* = ref LayerObj
+
   Conn* = object
     slot: cint           ## the descriptor plus one, so a zeroed value owns nothing
     deadline: Deadline   ## the standing budget; an operation can only tighten it
@@ -71,6 +79,8 @@ type
     rlen: int            ## bytes held
     rpos: int            ## bytes already consumed from the front
     wbuf: seq[byte]
+    layer: nil Layer
+    ops: nil StreamOpsPtr  ## the layer's operations; nil reads the descriptor
 
   Listener* = object
     raw: rawtcp.TcpListener
@@ -87,7 +97,8 @@ proc `=destroy`*(c: Conn) =
   ## one, so the buffers are freed here too.
   if c.fd >= 0:
     releaseFd(c.stop, c.fd)
-    closeFd(c.fd)
+    if c.layer == nil: closeFd(c.fd)
+  `=destroy`(c.layer)      # a layer closes the descriptor it took over
   release(c.stop)
   `=destroy`(c.rbuf)
   `=destroy`(c.wbuf)
@@ -97,6 +108,8 @@ proc `=wasMoved`*(c: var Conn) {.nodestroy, inline.} =
   ## zeroed or moved-from value would own 0, which is stdin, and close it.
   c.slot = 0
   c.stop = nil
+  c.ops = nil
+  `=wasMoved`(c.layer)
   `=wasMoved`(c.rbuf)
   `=wasMoved`(c.wbuf)
 
@@ -105,6 +118,12 @@ proc `=dup`*(c: Conn): Conn {.error.}
 proc `=copy`*(dest: var Conn; src: Conn) {.error.}
   ## Two values over one descriptor are two owners, and whichever dies first
   ## closes it under the other.
+
+proc releaseDescriptor*(c: var Conn): cint =
+  ## Give the descriptor to a layer that is about to be installed: the
+  ## connection keeps its number for `nativeHandle` and for cancellation, and
+  ## stops being the one that closes it. Call `install` next.
+  result = c.fd
 
 proc initConn*(fd: cint; deadline: Deadline; stop: nil CancelToken = nil): Conn =
   ## Take ownership of a connected, non-blocking stream socket. `stop` is the
@@ -115,7 +134,7 @@ proc initConn*(fd: cint; deadline: Deadline; stop: nil CancelToken = nil): Conn 
   ## The buffers start empty. The first `fill` or `scratch` allocates one, so
   ## a connection that never speaks costs a descriptor and a token.
   result = Conn(slot: fd + 1, deadline: deadline, stop: newCancelToken(stop),
-                rbuf: @[], rlen: 0, rpos: 0, wbuf: @[])
+                rbuf: @[], rlen: 0, rpos: 0, wbuf: @[], layer: nil, ops: nil)
   adoptFd(result.stop, fd)
 
 proc isOpen*(c: Conn): bool {.inline.} = c.fd >= 0
@@ -142,13 +161,37 @@ proc close*(c: var Conn) =
   ## Close now and not at the end of the scope. Calling it twice is fine.
   if c.fd >= 0:
     releaseFd(c.stop, c.fd)
-    closeFd(c.fd)
+    if c.layer == nil: closeFd(c.fd)
     c.slot = 0
+  c.ops = nil
+  c.layer = nil
 
 proc shutdownWrite*(c: Conn) =
   ## Send FIN and keep reading: the half-close a request/response protocol
   ## uses to say "that was everything".
-  if c.fd >= 0: fdShutdown(c.fd, 1)
+  if c.fd >= 0:
+    let table = c.ops
+    let layer = c.layer
+    if table != nil and layer != nil: table.shutdownWrite(borrowRefContext(layer))
+    else: fdShutdown(c.fd, 1)
+
+proc buffered*(c: Conn): int {.inline.}
+
+proc install*(c: var Conn; layer: Layer; ops: StreamOpsPtr) =
+  ## Put `layer` between this connection and its descriptor. From here on
+  ## every read and write goes through `ops`, and the layer closes the
+  ## descriptor when the connection dies. Install before the first read: bytes
+  ## already buffered were read below the layer.
+  assert c.buffered == 0, "install a layer before reading through the connection"
+  c.layer = layer
+  c.ops = ops
+
+proc layerOps*(c: Conn): nil StreamOpsPtr {.inline.} = c.ops
+proc layerContext*(c: Conn): nil pointer {.inline.} =
+  ## The layer as the context its operations take. For the templates below.
+  result = nil
+  let layer = c.layer
+  if layer != nil: result = borrowRefContext(layer)
 
 proc localAddress*(c: Conn): SocketAddress = fdLocal(c.fd)
 proc remoteAddress*(c: Conn): SocketAddress = fdRemote(c.fd)
@@ -199,7 +242,12 @@ template fill*(c: var Conn; dl: Deadline = never): int =
   block:
     let room = fillRoom(c)
     var got = 0
-    fdRecvInline(c.nativeHandle, 0, fillTarget(c), room, budget(c, dl), got, nil, cancelToken(c))
+    let table = layerOps(c)
+    let context = layerContext(c)
+    if table == nil or context == nil:
+      fdRecvInline(c.nativeHandle, 0, fillTarget(c), room, budget(c, dl), got, nil, cancelToken(c))
+    else:
+      got = table.recv(context, fillTarget(c), room, budget(c, dl), cancelToken(c))
     checkIo(got)
     filled(c, got)
     got
@@ -217,7 +265,12 @@ template read*(c: var Conn; dest: var openArray[byte]; dl: Deadline = never): in
   block:
     var got = take(c, dest)
     if got == 0 and dest.len > 0:
-      fdRecvInline(c.nativeHandle, 0, addr dest[0], dest.len, budget(c, dl), got, nil, cancelToken(c))
+      let table = layerOps(c)
+      let context = layerContext(c)
+      if table == nil or context == nil:
+        fdRecvInline(c.nativeHandle, 0, addr dest[0], dest.len, budget(c, dl), got, nil, cancelToken(c))
+      else:
+        got = table.recv(context, addr dest[0], dest.len, budget(c, dl), cancelToken(c))
       checkIo(got)
     got
 
@@ -255,11 +308,17 @@ template writeBytes*(c: var Conn; start: pointer; count: int; dl: Deadline) =
     let first = start
     let total = count
     let until = budget(c, dl)
+    let table = layerOps(c)
+    let context = layerContext(c)
     var sent = 0
     while sent < total:
       var k = 0
-      fdSendInline(c.nativeHandle, 0, cast[pointer](cast[uint](first) + uint(sent)),
-                   total - sent, until, k, nil, cancelToken(c))
+      if table == nil or context == nil:
+        fdSendInline(c.nativeHandle, 0, cast[pointer](cast[uint](first) + uint(sent)),
+                     total - sent, until, k, nil, cancelToken(c))
+      else:
+        k = table.send(context, cast[pointer](cast[uint](first) + uint(sent)),
+                       total - sent, until, cancelToken(c))
       if k == 0: k = NoProgress
       checkIo(k)
       sent += k
