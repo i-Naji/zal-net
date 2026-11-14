@@ -1,0 +1,1 @@
+PASS Unix-domain connect, accept, lines; the path is gone after close

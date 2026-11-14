@@ -1,4 +1,4 @@
-# A connection: one TCP stream, its read buffer, its deadline and its stop
+# A connection: one TCP or Unix-domain stream, its read buffer, its deadline and its stop
 # token. The shape follows `std/socket`, so code written against one reads
 # like code written against the other.
 #
@@ -41,6 +41,7 @@ import zal_net/rt
 import zal_net/rt/[cancel, time]
 import zal_net/raw/fdops
 import zal_net/raw/tcp as rawtcp
+import zal_net/raw/unix as rawunix
 import zal_net/net/[address, failure]
 import zal_net/buffers
 import zal_net/errors
@@ -73,6 +74,8 @@ type
 
   Listener* = object
     raw: rawtcp.TcpListener
+    local: rawunix.UnixListener   ## the one in use when `isLocal`
+    isLocal: bool
     stop: nil CancelToken
     noDelay: bool
 
@@ -296,26 +299,46 @@ proc connect*(host: string; port: uint16; dl: Deadline = never;
   ## exchange that should be bounded.
   var s = default(rawtcp.TcpStream)
   checkIo(connectInto(addr s, host, port, SetupLimitMs, noDelay, 0, stop, dl))
-  result = initConn(takeNativeHandle(addr s), never, stop)
+  result = initConn(rawtcp.takeNativeHandle(addr s), never, stop)
 
 proc connect*(address: SocketAddress; dl: Deadline = never;
               stop: nil CancelToken = nil; noDelay = true): Conn {.passive, raises.} =
   var s = default(rawtcp.TcpStream)
   checkIo(connectInto(addr s, address, SetupLimitMs, noDelay, 0, stop, dl))
-  result = initConn(takeNativeHandle(addr s), never, stop)
+  result = initConn(rawtcp.takeNativeHandle(addr s), never, stop)
 
 proc listen*(port: uint16; host = ""; backlog = 1024; stop: nil CancelToken = nil;
              noDelay = true; reusePort = false): Listener {.raises.} =
   ## Listen on `host`, or on every address when it is empty. Port 0 asks the
   ## kernel for one; `port` says which. Connections accepted here get children
   ## of `stop`, so cancelling it ends the accept and every connection.
-  result = Listener(raw: default(rawtcp.TcpListener), stop: stop, noDelay: noDelay)
+  result = Listener(raw: default(rawtcp.TcpListener), local: default(rawunix.UnixListener),
+                    isLocal: false, stop: stop, noDelay: noDelay)
   retain(stop)
   checkIo(listenInto(addr result.raw, port, host, backlog, noDelay, reusePort))
+
+proc connectUnix*(path: string; dl: Deadline = never;
+                  stop: nil CancelToken = nil): Conn {.passive, raises.} =
+  ## Connect to the Unix-domain stream socket at `path`. On Linux a path that
+  ## starts with `@` names an abstract socket.
+  var s = default(rawunix.UnixStream)
+  checkIo(connectUnixInto(addr s, path, SetupLimitMs, 0, stop, dl))
+  result = initConn(rawunix.takeNativeHandle(addr s), never, stop)
+
+proc listenUnix*(path: string; backlog = 1024; stop: nil CancelToken = nil): Listener {.raises.} =
+  ## Listen on a Unix-domain stream socket. A stale socket file at `path` is
+  ## replaced, a live one is refused, and `close` removes the file.
+  result = Listener(raw: default(rawtcp.TcpListener), local: default(rawunix.UnixListener),
+                    isLocal: true, stop: stop, noDelay: false)
+  retain(stop)
+  checkIo(listenUnixInto(addr result.local, path, backlog))
 
 proc port*(l: Listener): uint16 {.inline.} = rawtcp.port(l.raw)
 
 proc rawListener*(l: var Listener): rawtcp.TcpListenerPtr {.inline.} = addr l.raw
+proc localListener*(l: var Listener): rawunix.UnixListenerPtr {.inline.} = addr l.local
+proc isLocal*(l: Listener): bool {.inline.} = l.isLocal
+  ## True for a Unix-domain listener.
 proc stopToken*(l: Listener): nil CancelToken {.inline.} = l.stop
 proc tunesNoDelay*(l: Listener): bool {.inline.} = l.noDelay
 
@@ -323,13 +346,21 @@ template accept*(l: var Listener; dl: Deadline = never): Conn =
   ## The next connection. Raises `TimeoutError` at `dl` and `AbortedOperation`
   ## when the listener's token was cancelled.
   block:
-    var s = default(rawtcp.TcpStream)
-    checkIo(acceptInto(addr s, rawListener(l), 0, tunesNoDelay(l), dl, stopToken(l)))
-    initConn(takeNativeHandle(addr s), never, stopToken(l))
+    var accepted: cint = -1
+    if isLocal(l):
+      var s = default(rawunix.UnixStream)
+      checkIo(acceptUnixInto(addr s, localListener(l), 0, dl, stopToken(l)))
+      accepted = rawunix.takeNativeHandle(addr s)
+    else:
+      var s = default(rawtcp.TcpStream)
+      checkIo(acceptInto(addr s, rawListener(l), 0, tunesNoDelay(l), dl, stopToken(l)))
+      accepted = rawtcp.takeNativeHandle(addr s)
+    initConn(accepted, never, stopToken(l))
 
 proc close*(l: var Listener) =
   ## Stop listening. The owner calls this while no task waits in `accept`,
   ## which holds because `accept` needs the same `var Listener`.
-  closeNow(l.raw)
+  if l.isLocal: rawunix.closeNow(l.local)
+  else: rawtcp.closeNow(l.raw)
   release(l.stop)
   l.stop = nil
