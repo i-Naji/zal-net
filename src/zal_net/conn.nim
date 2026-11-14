@@ -64,7 +64,7 @@ const
 
 type
   Conn* = object
-    fd: cint
+    slot: cint           ## the descriptor plus one, so a zeroed value owns nothing
     deadline: Deadline   ## the standing budget; an operation can only tighten it
     stop: nil CancelToken
     rbuf: seq[byte]
@@ -79,6 +79,8 @@ type
     stop: nil CancelToken
     noDelay: bool
 
+proc fd(c: Conn): cint {.inline.} = c.slot - 1
+
 proc `=destroy`*(c: Conn) =
   ## The descriptor goes when the value does, so the error path that nobody
   ## wrote cannot leak it. A hand-written destructor replaces the field-wise
@@ -91,8 +93,9 @@ proc `=destroy`*(c: Conn) =
   `=destroy`(c.wbuf)
 
 proc `=wasMoved`*(c: var Conn) {.nodestroy, inline.} =
-  ## -1 and not the default zero: 0 is stdin, a perfectly good descriptor.
-  c.fd = -1
+  ## The slot holds the descriptor plus one. With the plain descriptor a
+  ## zeroed or moved-from value would own 0, which is stdin, and close it.
+  c.slot = 0
   c.stop = nil
   `=wasMoved`(c.rbuf)
   `=wasMoved`(c.wbuf)
@@ -111,7 +114,7 @@ proc initConn*(fd: cint; deadline: Deadline; stop: nil CancelToken = nil): Conn 
   ##
   ## The buffers start empty. The first `fill` or `scratch` allocates one, so
   ## a connection that never speaks costs a descriptor and a token.
-  result = Conn(fd: fd, deadline: deadline, stop: newCancelToken(stop),
+  result = Conn(slot: fd + 1, deadline: deadline, stop: newCancelToken(stop),
                 rbuf: @[], rlen: 0, rpos: 0, wbuf: @[])
   adoptFd(result.stop, fd)
 
@@ -140,7 +143,7 @@ proc close*(c: var Conn) =
   if c.fd >= 0:
     releaseFd(c.stop, c.fd)
     closeFd(c.fd)
-    c.fd = -1
+    c.slot = 0
 
 proc shutdownWrite*(c: Conn) =
   ## Send FIN and keep reading: the half-close a request/response protocol

@@ -63,10 +63,12 @@ type
   UdpSocket* = object
     ## A datagram socket that owns its descriptor. It is move-only, so one
     ## value closes the descriptor, once.
-    fd: cint
+    slot: cint           ## the descriptor plus one, so a zeroed value owns nothing
     family: cint         ## AF_INET6 when dual stack, else AF_INET; `sendTo` maps peers to it
     deadline: Deadline   ## the standing budget; an operation can only tighten it
     stop: nil CancelToken
+
+proc fd(u: UdpSocket): cint {.inline.} = u.slot - 1
 
 proc `=destroy`*(u: UdpSocket) =
   ## The descriptor goes when the value does, so the error path that nobody
@@ -75,9 +77,9 @@ proc `=destroy`*(u: UdpSocket) =
   release(u.stop)
 
 proc `=wasMoved`*(u: var UdpSocket) {.nodestroy, inline.} =
-  ## -1, because the default 0 is stdin and a moved-from value must close
-  ## nothing.
-  u.fd = -1
+  ## The slot holds the descriptor plus one, as in `Conn`: a moved-from or
+  ## zeroed value then owns nothing and closes nothing.
+  u.slot = 0
   u.stop = nil
 
 proc `=dup`*(u: UdpSocket): UdpSocket {.error.}
@@ -92,7 +94,7 @@ proc initUdp(fd, family: cint; stop: nil CancelToken): UdpSocket =
   # waits and leaves the parent alone. Like the token of `foundation/udp`, it
   # is not bound to the descriptor with `adoptFd`: a UDP socket is never shut
   # down.
-  UdpSocket(fd: fd, family: family, deadline: never, stop: newCancelToken(stop))
+  UdpSocket(slot: fd + 1, family: family, deadline: never, stop: newCancelToken(stop))
 
 proc isOpen*(u: UdpSocket): bool {.inline.} = u.fd >= 0
   ## False after `close` and in a moved-from value.
@@ -122,7 +124,7 @@ proc close*(u: var UdpSocket) =
   ## Close now, before the end of the scope. A second call does nothing.
   if u.fd >= 0:
     closeFd(u.fd)
-    u.fd = -1
+    u.slot = 0
 
 proc localAddress*(u: UdpSocket): SocketAddress = fdLocal(u.fd)
   ## The address the socket is bound to: what a peer sends to.
