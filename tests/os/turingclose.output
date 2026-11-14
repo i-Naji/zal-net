@@ -1,1 +1,0 @@
-PASS closing a descriptor with a poll in flight releases the socket

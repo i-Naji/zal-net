@@ -1,2 +1,0 @@
-PASS empty TUN ownership and transfer bounds
-SKIP TUN devices need privileges here (not permitted)
