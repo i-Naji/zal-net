@@ -28,6 +28,7 @@ import zal_net/net/endpointdial
 
 import std/[atomics, syncio]
 import zal_net/rt
+import zal_net/rt/[sync, cancel]
 import zal_net/private/os
 import zal_net/private/sys/threads
 import zal_net/net/sockaddr
@@ -81,6 +82,13 @@ type
     ok*: bool
     call*: nil proc (e: ptr DatagramEngine; m: ptr EngineMsg) {.nimcall.}   ## MsgCall
     done: int                 # atomic: handled
+    finished: Event           # set with `done`, for a task that waits
+
+proc markDone(m: ptr EngineMsg) =
+  ## Publish the outcome, then wake a waiting task. Both the engine and the
+  ## sender hold a reference here, so the event outlives this call.
+  atomicStore(m.done, 1, moRelease)
+  setEvent(addr m.finished)
 
 proc cCalloc(n, size: csize_t): nil pointer {.importc: "calloc", header: "<stdlib.h>".}
 proc cFree(p: nil pointer) {.importc: "free", header: "<stdlib.h>".}
@@ -208,7 +216,7 @@ proc discardMessage(j: JobPtr) {.nimcall.} =
     discard closeRaw(message.fd)
     message.fd = -1
   message.ok = false
-  atomicStore(message.done, 1, moRelease)
+  markDone(message)
 
 proc newEngineMsg*(op: int; size = sizeof(EngineMsg)): ptr EngineMsg =
   result = cast[ptr EngineMsg](newJob(max(size, sizeof(EngineMsg)), noJob, onDrop = discardMessage))
@@ -252,6 +260,15 @@ proc stopEngine*(e: ptr DatagramEngine): ptr EngineMsg =
   postEngineMsg(e, result)
 
 proc engineStopped*(e: ptr DatagramEngine): bool {.inline.} = atomicLoad(e.stopped, moAcquire) != 0
+
+proc waitEngineMsg*(m: ptr EngineMsg; deadline: Deadline;
+                    tok: nil CancelToken = nil): bool {.passive.} =
+  ## Park this task until the engine has handled `m`, or until `deadline` or
+  ## `tok`. True when it was handled; read `m.ok` for the outcome. The caller
+  ## still owns its reference either way.
+  if engineMsgDone(m): return true
+  discard wait(addr m.finished, deadline, tok)
+  result = engineMsgDone(m)
 
 proc waitEngineMsg*(m: ptr EngineMsg; timeoutMs: int): bool =
   ## Block this thread until `m` is handled (not on a loop: use a passive
@@ -389,10 +406,7 @@ proc listAssocs*(e: ptr DatagramEngine; outp: ptr seq[AssocInfo]; limit: int): i
   if request == nil: return
   let m: ListMsgPtr = request
   postEngineMsg(e, addr m.msg)
-  let deadline = afterMs(1000)
-  while not engineMsgDone(addr m.msg) and not expired(deadline):
-    sleepMs(1)
-  if engineMsgDone(addr m.msg) and m.msg.ok:
+  if waitEngineMsg(addr m.msg, afterMs(1000)) and m.msg.ok:
     let items = listItems(m)
     var i = 0
     while i < m.n:

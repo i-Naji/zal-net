@@ -8,7 +8,7 @@ import zal_net/net/endpoint, zal_net/raw/socket
 
 proc finishEngine(e: ptr DatagramEngine) {.passive.} =
   let stopped = stopEngine(e)
-  while not engineMsgDone(stopped): parkUntil(afterMs(10))
+  discard waitEngineMsg(stopped, never)
   releaseEngineMsg(stopped)
   while not freeEngine(e): parkUntil(afterMs(10))
 
@@ -28,12 +28,12 @@ proc main() {.passive.} =
   let b = tryListenUdp(9002, bindAddr = "127.0.0.1")
   if a.ok:
     let added = addListener(first, 1, a.fd, addr tunnelCodec, addr target)
-    while not engineMsgDone(added): parkUntil(afterMs(10))
+    discard waitEngineMsg(added, never)
     echo "first tunnel ready: ", added.ok
     releaseEngineMsg(added)
   if b.ok:
     let added = addListener(second, 1, b.fd, addr tunnelCodec, addr target)
-    while not engineMsgDone(added): parkUntil(afterMs(10))
+    discard waitEngineMsg(added, never)
     echo "second tunnel ready: ", added.ok
     releaseEngineMsg(added)
   parkUntil(afterMs(30_000))

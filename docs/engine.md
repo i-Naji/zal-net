@@ -297,14 +297,17 @@ and released by `unbindListener`; an association's in `associationState[T]`
 
 Other tasks talk to the engine with messages: `addListener`, `removeListener`,
 `stopEngine`, and `newEngineMsg(MsgCall)` with a `call` proc run on the
-engine. The sender waits for `engineMsgDone`, reads `ok` and releases it:
+engine. The sender parks in `waitEngineMsg` until the engine has handled the
+message, reads `ok` and releases it:
 
 ```nim
 proc waitDone(m: ptr EngineMsg): bool {.passive.} =
-  while not engineMsgDone(m): sleepMs(1)
-  result = m.ok
+  result = waitEngineMsg(m, never) and m.ok
   releaseEngineMsg(m)
 ```
+
+`waitEngineMsg(m, timeoutMs)` with a plain count is the form for a thread
+that is not a task, such as the main thread before `runMain`.
 
 A service makes its engine with `newDatagramEngine` and `startEngine`, serves
 a socket from `tryListenUdp` with `waitDone(addListener(e, 0, u.fd, unsafeAddr

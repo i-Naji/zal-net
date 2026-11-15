@@ -184,7 +184,7 @@ template drainInbox(e: ptr DatagramEngine; now: int64) =
     if j.tag == MsgTag:
       handleMsg(e, cast[ptr EngineMsg](j))
       if e.retired.len != 0: drainRetired(e)
-      atomicStore(cast[ptr EngineMsg](j).done, 1, moRelease)
+      markDone(cast[ptr EngineMsg](j))
     elif j.tag >= SetupTag:
       e.dnsOut = e.dnsOut - 1
       setupDone(e, cast[ptr LegSetupJob](j), now)
