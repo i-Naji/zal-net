@@ -454,8 +454,8 @@ proc stopAccepting*() =
 proc closeListener*(fd: cint; acceptors = 1;
                     deadline = afterMs(5000)): WaitResult {.passive.} =
   ## Stop the accept loops on listener `fd` and close it, freeing its port.
-  ## `acceptors` is how many accept loops run on it (one `spawnAll`: the
-  ## default). Waits until each has seen AcceptClosed and no loop still
+  ## `acceptors` is how many accept loops run on it (usually one per worker;
+  ## the default is one). Waits until each has seen AcceptClosed and no loop still
   ## watches the descriptor, so its number can be reused safely.
   ## wrClosed when `fd` is not a registered listener. wrTimedOut when an
   ## accept loop did not answer by `deadline`: the listener then stays open

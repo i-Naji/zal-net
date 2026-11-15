@@ -8,9 +8,9 @@ import zal_net/raw/io
 
 template acceptEach*(listenFd: cint; body: untyped) =
   ## Run `body` for every accepted descriptor, bound to the injected
-  ## `accepted` (a non-blocking cint). Use inside a passive proc, one per
-  ## loop via `spawnAll`. (Nimony injects only fixed names, so the name is
-  ## not a parameter.)
+  ## `accepted` (a non-blocking cint). Use inside a passive proc, started
+  ## once per worker (see `runtimeWorkers`). (Nimony injects only fixed
+  ## names, so the name is not a parameter.)
   block:
     var aeRes = 0
     var aeBurst = 0

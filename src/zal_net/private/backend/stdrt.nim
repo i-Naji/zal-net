@@ -201,7 +201,8 @@ proc beNeedsPoke*(): bool {.inline.} = true
   ## A poll armed on the listener completes only when it becomes readable.
 
 proc runtimeWorkers*(): int = poolWorkers()
-  ## Pool workers. Placement is the pool's: `spawnAll` runs one instance.
+  ## Pool workers. A service starts one accept loop per worker; which
+  ## worker runs each one is the pool's choice.
 
 proc onLoop*(): bool {.inline.} = isPoolWorker()
 
