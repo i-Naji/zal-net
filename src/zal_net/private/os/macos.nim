@@ -9,6 +9,7 @@ const
   EConnRefused* = 61
   ENotSocket* = 38
   ONonblock = 4.cint
+  SockCloexec = 0.cint         # no SOCK_CLOEXEC: fcntl after socket()
   NoFile = 8.cint              # RLIMIT_NOFILE
   MapPrivateAnon = 0x1002.cint
 

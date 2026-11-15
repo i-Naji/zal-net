@@ -11,6 +11,7 @@ const
   EConnRefused* = 111
   ENotSocket* = 88
   ONonblock = 2048.cint
+  SockCloexec = 0x80000.cint   # SOCK_CLOEXEC, ORed into socket()'s type
   NoFile = 7.cint              # RLIMIT_NOFILE
   MapPrivateAnon = 0x22.cint
 

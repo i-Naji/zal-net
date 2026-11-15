@@ -120,7 +120,9 @@ proc acceptNow*(listenFd: cint): int {.noinline.} =
       if fd >= 0:
         # BSD/Darwin accept inherits O_NONBLOCK from the non-blocking
         # listener; verify rather than assume (nn_win.c sets it).
-        if makeNonblocking(fd): return int(fd)
+        if makeNonblocking(fd):
+          when not defined(windows): sockCloexec(fd)   # Windows: nn_win.c makes it non-inheritable
+          return int(fd)
         let error = lastErr()
         discard sockClose(fd)
         return -error

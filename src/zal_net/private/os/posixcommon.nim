@@ -1,7 +1,7 @@
 # Included by linux.nim and macos.nim after they define ONonblock, NoFile,
 # MapPrivateAnon and fdCeiling. Each call is the C library's own.
 
-proc sockSocket*(af, kind, proto: cint): cint {.importc: "socket", header: "<sys/socket.h>".}
+proc cSocket(af, kind, proto: cint): cint {.importc: "socket", header: "<sys/socket.h>".}
 proc sockClose*(fd: cint): cint {.importc: "close", header: "<unistd.h>".}
 proc sockBind*(fd: cint; sa: pointer; len: cuint): cint {.importc: "bind", header: "<sys/socket.h>".}
 proc sockConnect*(fd: cint; sa: pointer; len: cuint): cint {.importc: "connect", header: "<sys/socket.h>".}
@@ -49,6 +49,18 @@ proc sockSetNonblock*(fd: cint; on: bool): bool =
 proc sockNonblock*(fd: cint): bool = sockSetNonblock(fd, true)
 
 proc setCloexec(fd: cint) = discard cFcntl(fd, FSetFd, 1.cint)
+
+proc sockCloexec*(fd: cint) {.inline.} =
+  ## Close `fd` in a program this one starts. An accepted socket on macOS
+  ## needs it; Linux's accept4 sets it already.
+  when SockCloexec == 0: setCloexec(fd)
+
+proc sockSocket*(af, kind, proto: cint): cint =
+  ## A socket closed on exec, so a child process cannot hold a listener's
+  ## port, or a connection open, after this process is gone.
+  result = cSocket(af, kind or SockCloexec, proto)
+  when SockCloexec == 0:
+    if result >= 0: setCloexec(result)
 
 proc sockPair*(sv: ptr cint): cint = cSocketpair(1.cint, 1.cint, 0.cint, sv)
   ## A connected stream pair (AF_UNIX).
