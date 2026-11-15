@@ -84,4 +84,7 @@ export datagram
 # Byte helpers and error codes
 import zal_net/[buffers, bytes, errors, log]
 import zal_net/codecs/socksaddr
-export buffers, bytes, errors, log, socksaddr
+# `describe` comes from `dns`, which covers every code and adds the
+# resolver's own text for a getaddrinfo failure.
+export buffers, bytes, log, socksaddr
+export errors except describe

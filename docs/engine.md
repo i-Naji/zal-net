@@ -421,9 +421,9 @@ Engine-tier operations return codes and do not raise:
 | -120,001 to -179,999 | a `getaddrinfo` failure, `DnsErrorBase` minus its code |
 | -200,000 to -299,999 | a layer on a `Conn`: `LayerErrorBase`, `LayerErrorSpan` |
 
-`describe(code)` builds a diagnostic, allocating only then. `zal_net/engine`
-exports two, `errors.describe` and `dns.describe` (which adds the resolver's
-text), so call it qualified: `dns.describe(code)`.
+`describe(code)` builds a diagnostic, allocating only then. The one
+`zal_net/engine` exports covers every code and adds the resolver's text for
+a `getaddrinfo` failure.
 
 The application tier raises Nimony's `ErrorCode`, a value, so a raise
 allocates nothing. `checkIo(code)` raises for a negative code and `failIo`
