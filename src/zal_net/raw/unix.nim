@@ -210,7 +210,9 @@ proc acceptUnixInto*(stream: UnixStreamPtr; listener: UnixListenerPtr;
       parkAcceptCancellable(listener[].fd, deadline, tok, ready)
       if ready <= 0: return (if ready < 0: ready else: ResourceClosed)
     else:
-      return fd
+      # One connection's failure; the listener is still usable (see
+      # `acceptInto` in raw/tcp).
+      parkUntil(earlier(deadline, afterMs(1)))
 
 template accept*(l: UnixListener; streamTimeoutMs = DefaultTimeoutMs;
                  deadline: Deadline = never; tok: nil CancelToken = nil): UnixStream =

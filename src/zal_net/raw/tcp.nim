@@ -423,7 +423,11 @@ proc acceptInto*(stream: TcpStreamPtr; listener: TcpListenerPtr;
       parkAcceptCancellable(listener[].fd, deadline, tok, ready)
       if ready <= 0: return (if ready < 0: ready else: ResourceClosed)
     else:
-      return fd
+      # A failure that belongs to one connection (a client that reset
+      # before the accept, ECONNABORTED; EPROTO; a network that went down)
+      # leaves the listener usable. Returning it would end a server's
+      # accept loop; accept(2) says to try again.
+      parkUntil(earlier(deadline, afterMs(1)))
 
 template accept*(l: TcpListener; streamTimeoutMs = DefaultTimeoutMs; noDelay = true;
                   deadline: Deadline = never; tok: nil CancelToken = nil): TcpStream =
