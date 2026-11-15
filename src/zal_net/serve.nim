@@ -91,8 +91,10 @@ template serve*[C: ref](listener: var Listener; handler: Handler[C]; context: C;
         var c = accept(listener)
         started(service)
         if not trySpawnTask(dispatch(c, held, service)):
+          # The task limit is reached: this connection is dropped, and
+          # accepting goes on once running handlers have finished some.
           finished(service)
-          failIo(ResourceClosed)
+          parkUntil(afterMs(50))
         inc burst
         if burst == AcceptBurst:
           yieldNow()
