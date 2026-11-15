@@ -67,14 +67,20 @@ proc setIntOpt*(fd, level, opt: cint; v: cint) {.inline.} =
   var x = v
   discard setsockopt(fd, level, opt, addr x, cuint(sizeof(x)))
 
+const SoExclusiveAddrUse = cint(not 4)   ## Windows: ~SO_REUSEADDR
+
 proc setReuse(fd, sockType: cint; reusePort: bool) =
   ## SO_REUSEADDR for TCP only: rebinding a port with connections in
   ## TIME_WAIT. On a UDP socket, Linux would let other sockets bind the
   ## same port (even an automatic one), splitting its datagrams between
   ## them. SO_REUSEPORT only when asked: that sharing is then the point.
   ## Windows needs neither to rebind a listener, and its SO_REUSEADDR would
-  ## let another socket take the port: nothing is set there.
-  when not defined(windows):
+  ## let another socket take the port. There a TCP listener is exclusive
+  ## instead, so no other socket can bind the port while it is open.
+  when defined(windows):
+    if sockType == SOCK_STREAM and not reusePort:
+      setIntOpt(fd, SOL_SOCKET, SoExclusiveAddrUse, 1)
+  else:
     if sockType == SOCK_STREAM: setIntOpt(fd, SOL_SOCKET, SO_REUSEADDR, 1)
     if reusePort: setIntOpt(fd, SOL_SOCKET, SO_REUSEPORT, 1)
 
