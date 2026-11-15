@@ -313,6 +313,31 @@ proc peekInput(fd: cint): int =
     if err == EIntr: continue
     return (if err == EAgain: IoAgain else: -err)
 
+template relayPoll(fd: cint; events: IoEvents; deadline: Deadline; res: var int) =
+  ## One park on `deadline` itself. A runtime stop reaches the pump through
+  ## the parked-descriptor table, which shuts the socket down, so the poll
+  ## needs no slices to notice it: an idle relay costs no wake-ups. A
+  ## descriptor the table cannot hold keeps the sliced park.
+  block:
+    if enterParked(fd):
+      parkPollOwned(fd, events, deadline, res)
+      leaveParked(fd)
+    else:
+      parkPoll(fd, events, deadline, res)
+
+template relayReady(r: Relay; fd: cint; events: IoEvents; res: var int) =
+  ## `parkReady` on the connection's idle stamp, through `relayPoll`.
+  block:
+    var deadline = ioDeadline(addr r.lastIo, r.timeoutMs)
+    while true:
+      relayPoll(fd, events, deadline, res)
+      if res > 0: break
+      if res == IoTimedOut:
+        deadline = ioDeadline(addr r.lastIo, r.timeoutMs)
+        if not expired(deadline): continue
+        break
+      if not transientIo(res): break
+
 template relayPark(r: Relay; fd: cint; events: IoEvents; res: var int) =
   ## A pump's park (`parkReady` on the connection's idle stamp). On Windows
   ## with the std backend nothing wakes a parked task when the other
@@ -330,7 +355,7 @@ template relayPark(r: Relay; fd: cint; events: IoEvents; res: var int) =
           if monoNow() >= ioDeadline(addr r.lastIo, r.timeoutMs): break
         elif not transientIo(res): break
   else:
-    parkReady(fd, events, addr r.lastIo, r.timeoutMs, res)
+    relayReady(r, fd, events, res)
 
 template relayReadPark(r: Relay; d: DirectionPtr; res: var int) =
   ## Idle payload reclamation has its own deadline. It neither consumes input
@@ -354,7 +379,8 @@ template relayReadPark(r: Relay; d: DirectionPtr; res: var int) =
         deadline = earlier(deadline, afterMs(FailPollMs))
       when defined(linux) and defined(nimIoringNoUring):
         deadline = earlier(deadline, afterMs(probeMs))
-      parkPoll(d.src, {evRead}, deadline, res)
+      when defined(windows): parkPoll(d.src, {evRead}, deadline, res)
+      else: relayPoll(d.src, {evRead}, deadline, res)
       if res > 0: break
       if res == IoTimedOut:
         if atomicLoad(r.failed, moAcquire):

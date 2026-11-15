@@ -57,6 +57,7 @@ import zal_net/private/os
 import zal_net/net/sockaddr
 import zal_net/raw/socket
 import zal_net/private/sys/splice
+import zal_net/private/core/parked
 
 # Includes preserve private fields and bind passive templates in one module.
 include zal_net/private/relay/contracts
