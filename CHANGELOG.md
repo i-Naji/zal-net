@@ -42,3 +42,4 @@
 - Removed `net/unix`, `net/udp`, `net/server`, `net/scoped`, `raw/serve`, `foundation/udp`, `foundation/unix`, `foundation/unixlistener`, the `foundation` module, `BufReader` (`zal_net/reader`) and the unused admission gate. The stream concepts live in `net/stream`; the datagram engine's readiness in `private/datagram`.
 - Removed `net/tcp`, `net/tcpview`, `net/transport`, `foundation/tcp`, `foundation/tcplistener`, `ownership`, `io` and `IoFailure`, which only zal-tls still used before it moved to `Conn`, and with them `listenerClosing` (`raw/io`) and `takeTcpListener` (`raw/tcp`).
 - `zal_net/engine`: `ServiceLife` for the stop order of a service, and `Dialer` with `DirectDialer` for outbound connections (interface binding, routing mark).
+- `fillTo` and `sendAll` take an optional cancel token; `waitEngineMsg(m, deadline, tok)` parks a task until the engine has handled a message.

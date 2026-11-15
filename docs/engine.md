@@ -149,8 +149,9 @@ with that hook, `onEnd(r)`, where `r.endReason`, `r.upBytes` and
 batch.
 
 A handshake can read into the relay's own buffer: `fillTo(r, d, want,
-deadline, res, ok)` reads until `want` bytes sit after `d.off`; it takes no
-token, so only its deadline or a shut-down socket ends it. With a framer
+deadline, res, ok, tok)` reads until `want` bytes sit after `d.off`; its
+deadline, a shut-down socket or the optional `tok` ends it. `sendAll` takes
+the same optional token. With a framer
 on the source, the bytes past the handshake stay there and the framer opens
 them first, as in zal-ss's `receiveRequest`. A plain source starts from spans
 instead: `ensurePayload(d)`, copy the bytes to `bufAt(d, HeadRoom)`, set

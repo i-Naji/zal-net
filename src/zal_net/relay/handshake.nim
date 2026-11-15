@@ -2,14 +2,20 @@
 ## what a header needs, and send a reply.
 import zal_net/rt
 import zal_net/raw/io
+import zal_net/rt/cancel
+import zal_net/private/core/iocancel
 import zal_net/relay/conn
 
-template fillTo*(r: Relay; d: DirectionPtr; want: int; deadline: Deadline; res: var int; ok: var bool) =
+template fillTo*(r: Relay; d: DirectionPtr; want: int; deadline: Deadline; res: var int; ok: var bool;
+                 tok: nil CancelToken = nil) =
   ## Buffer at least `want` bytes after d.off. Extra bytes stay buffered.
-  ## Progress does not extend `deadline`. The arguments are evaluated once
-  ## (a template would otherwise re-evaluate `want` on every pass).
+  ## Progress does not extend `deadline`. Cancelling `tok` ends the wait with
+  ## `res` = ECancelled; the caller keeps `tok` alive until this returns. The
+  ## arguments are evaluated once (a template would otherwise re-evaluate
+  ## `want` on every pass).
   let ftWant = want
   let ftDeadline = deadline
+  let ftToken = tok
   ok = ensurePayload(d)
   while ok and d.fill - d.off < ftWant:
     let room = BufCap - d.fill
@@ -18,7 +24,7 @@ template fillTo*(r: Relay; d: DirectionPtr; want: int; deadline: Deadline; res: 
       touchIo(addr r.lastIo)
       d.fill = d.fill + n
     elif n == IoAgain:
-      parkPoll(d.src, {evRead}, ftDeadline, res)
+      parkCancellable(d.src, {evRead}, ftDeadline, ftToken, res)
       if res <= 0:
         ok = false
         break
@@ -26,8 +32,12 @@ template fillTo*(r: Relay; d: DirectionPtr; want: int; deadline: Deadline; res: 
       ok = false
       break
 
-template sendAll*(r: Relay; fd: cint; p0: pointer; n0: int; res: var int; ok: var bool) =
+template sendAll*(r: Relay; fd: cint; p0: pointer; n0: int; res: var int; ok: var bool;
+                  tok: nil CancelToken = nil) =
+  ## All `n0` bytes at `p0`, waiting up to the relay's idle limit for each
+  ## bit of room. Cancelling `tok` ends a wait with `res` = ECancelled.
   block:
+    let saToken = tok
     let saBase = cast[int](p0)
     let saLen = n0
     var sentOff = 0
@@ -38,7 +48,8 @@ template sendAll*(r: Relay; fd: cint; p0: pointer; n0: int; res: var int; ok: va
       if n > 0:
         sentOff = sentOff + n
       elif n == IoAgain:
-        parkReady(fd, {evWrite}, addr r.lastIo, r.timeoutMs, res)
+        if saToken == nil: parkReady(fd, {evWrite}, addr r.lastIo, r.timeoutMs, res)
+        else: parkCancellable(fd, {evWrite}, afterMs(r.timeoutMs), saToken, res)
         if res <= 0:
           ok = false
           break
