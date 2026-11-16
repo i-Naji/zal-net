@@ -96,3 +96,6 @@ proc unmapAnon*(p: nil pointer; len: int) = nnUnmapAnon(p, csize_t(len))
 
 proc ignoreSigpipe*() = discard
   ## Windows has no SIGPIPE: a send to a closed peer fails with an error.
+
+proc cpuQuota*(): int = 0
+  ## No CPU quota to honour here (see the Linux version).

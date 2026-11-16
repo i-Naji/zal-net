@@ -32,3 +32,6 @@ proc sockAbort*(fd: cint): bool =
   ## Disconnect a connected TCP socket now, waking whatever waits on it:
   ## with SO_LINGER 0 set, disconnectx resets it.
   result = cDisconnectx(fd, 0'u32, 0'u32) == 0   # SAE_ASSOCID_ANY, SAE_CONNID_ANY
+
+proc cpuQuota*(): int = 0
+  ## No CPU quota to honour here (see the Linux version).

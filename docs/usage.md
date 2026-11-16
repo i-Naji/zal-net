@@ -82,13 +82,16 @@ The process runner drains tasks and joins blocking/logging/signal services
 before shutting down the standard pool.
 `echo` is not synchronized between workers; handlers log through `zal_net/log`.
 The runtime cannot restart. Library close never shuts down the pool.
-Set `ZAL_WORKERS` before startup to configure the standard pool.
+Set `ZAL_WORKERS` before startup to configure the standard pool. Without it
+the pool gets one worker per CPU the process may run on, capped on Linux by
+the CPU quota of its cgroups (`docker --cpus`, a Kubernetes CPU limit). std's
+own default keeps a CPU back for a main thread that zal leaves idle.
 The standard pool runs up to `-d:trampolineSteps` (default 64) steps of a resumed
 chain inline before it polls again. On a 10-core Mac the default gives an HTTP
 hello server 13% more requests per second at 100 and 1000 connections, while a
 32-connection echo at 4 workers takes 25% longer with a 70% lower p99;
 `-d:trampolineSteps=0` reverses both. Pick it per application.
-The default comes from its CPU count/affinity; `runtimeWorkers()` reports it.
+`runtimeWorkers()` reports the count.
 `ZAL_TASKS` caps admitted tasks (default: the descriptor limit, at least 8192).
 A single worker delays datagram-engine readiness under heavy association churn; use two or more.
 I/O uses nonblocking native calls and public standard readiness/timer operations.
