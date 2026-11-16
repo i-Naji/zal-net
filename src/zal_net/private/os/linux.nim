@@ -84,3 +84,6 @@ proc cpuQuota*(): int =
     var cut = path.len - 1
     while cut > 0 and path[cut] != '/': dec cut
     path.setLen cut
+
+const UdpReusePortSpreads* = true
+  ## Datagrams to a port that several `SO_REUSEPORT` sockets share: Linux hashes each sender to one of the sockets.

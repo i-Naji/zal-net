@@ -99,3 +99,6 @@ proc ignoreSigpipe*() = discard
 
 proc cpuQuota*(): int = 0
   ## No CPU quota to honour here (see the Linux version).
+
+const UdpReusePortSpreads* = false
+  ## Datagrams to a port that several `SO_REUSEPORT` sockets share: Windows hands every datagram to one of the sockets.

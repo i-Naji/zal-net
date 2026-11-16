@@ -305,6 +305,12 @@ proc tryListenTcp*(port: uint16; backlog = 4096; bindAddr = ""; noDelay = true; 
 proc tryListenUdp*(port: uint16; bindAddr = ""; reusePort = false): ListenResult =
   tryListen(port, SOCK_DGRAM, 0, bindAddr, false, reusePort)
 
+const udpReusePortSpreads* = UdpReusePortSpreads
+  ## Does the kernel spread datagrams over UDP sockets that share a port with
+  ## `reusePort`? On Linux it hashes each sender to one of them, so a socket
+  ## per worker spreads UDP work over the workers. macOS and Windows hand every
+  ## datagram to one socket, and a second one would get nothing.
+
 proc openUdpSocket*(family: var cint; error: nil ptr int = nil): cint =
   ## Nonblocking dual-stack socket, with IPv4 fallback. Failure owns nothing;
   ## the optional error receives the native failure before cleanup overwrites it.

@@ -44,3 +44,4 @@
 - `zal_net/engine`: `ServiceLife` for the stop order of a service, and `Dialer` with `DirectDialer` for outbound connections (interface binding, routing mark).
 - `fillTo` and `sendAll` take an optional cancel token; `waitEngineMsg(m, deadline, tok)` parks a task until the engine has handled a message.
 - Start one pool worker per usable CPU by default, capped by the cgroup CPU quota on Linux.
+- `udpReusePortSpreads` (`raw/socket`, in `zal_net/engine`): whether UDP sockets sharing a port with `reusePort` split the senders (Linux) or not (macOS, Windows).
